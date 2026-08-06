@@ -8,10 +8,14 @@
 #
 # PHP 5.3 cannot use OpenSSL 1.1+ without a large source backport: its OpenSSL
 # extension accesses structures that became opaque in 1.1. This script therefore
-# builds a private OpenSSL 1.0.2u under a separate prefix. It does not replace the
-# system OpenSSL and does not touch the private OpenSSL 1.1 used by PHP 5.6.
+# builds a private OpenSSL 1.0.2u under a separate prefix.
 #
-# The php53 repository is a raw git tree and currently has no generated
+# The host libcurl must not be used: on current distributions it loads OpenSSL 3,
+# which conflicts with PHP's private OpenSSL 1.0.2 in the same process and causes
+# curl_exec() to segfault. A private current libcurl is built with GnuTLS instead,
+# so PHP has only one OpenSSL ABI loaded while HTTPS through ext/curl remains safe.
+#
+# The php53 repository is a raw git tree and may have no generated
 # configure/parser/scanner files. PHP 5.3 also requires Autoconf <= 2.59 and only
 # accepts specific Bison releases. A private, isolated build toolchain is used:
 # Autoconf 2.59, Bison 2.6.4 and re2c 0.16.
@@ -38,9 +42,11 @@ PREFIX="${PREFIX:-${NGM_ROOT}/${PHP_SERIES}}"
 BUILD_ROOT="${BUILD_ROOT:-/usr/local/src/ngm-php-build}"
 SRC_DIR="${BUILD_ROOT}/php-${PHP_RELEASE}"
 
-# Keep every incompatible component isolated from the working PHP 5.6 build.
+# Keep incompatible components isolated from the host and other PHP builds.
 OPENSSL_VERSION="1.0.2u"
 OPENSSL_PREFIX="${OPENSSL_PREFIX:-${NGM_ROOT}/openssl-1.0.2}"
+CURL_VERSION="8.21.0"
+CURL_PREFIX="${CURL_PREFIX:-${NGM_ROOT}/curl-gnutls}"
 MCRYPT_VERSION="2.5.8"
 MCRYPT_PREFIX="${MCRYPT_PREFIX:-${NGM_ROOT}/libmcrypt}"
 TOOLCHAIN="${TOOLCHAIN:-${NGM_ROOT}/.toolchain-php53}"
@@ -102,6 +108,20 @@ find_libdir() { # PREFIX LIBRARY_GLOB
   return 1
 }
 
+find_ca_bundle() {
+  local file
+  for file in \
+    /etc/pki/tls/certs/ca-bundle.crt \
+    /etc/ssl/certs/ca-certificates.crt \
+    /etc/ssl/ca-bundle.pem; do
+    if [ -s "$file" ]; then
+      printf '%s\n' "$file"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # ── Host dependencies ────────────────────────────────────────────────────────
 install_deps() {
   local pm
@@ -121,7 +141,7 @@ install_deps() {
       apt-get install -y --no-install-recommends \
         build-essential ca-certificates curl git patch pkg-config \
         perl m4 tar gzip bzip2 xz-utils \
-        libxml2-dev libcurl4-openssl-dev libjpeg-dev libpng-dev \
+        libxml2-dev libgnutls28-dev libjpeg-dev libpng-dev \
         libfreetype6-dev libbz2-dev libreadline-dev libxslt1-dev \
         libgmp-dev libsqlite3-dev zlib1g-dev libgettextpo-dev libcrypt-dev
       ;;
@@ -133,7 +153,7 @@ install_deps() {
         gcc gcc-c++ make ca-certificates curl git patch pkgconf-pkg-config \
         perl perl-FindBin perl-IPC-Cmd perl-File-Compare perl-Data-Dumper \
         m4 tar gzip bzip2 xz \
-        libxml2-devel libcurl-devel libjpeg-turbo-devel libpng-devel \
+        libxml2-devel gnutls-devel libjpeg-turbo-devel libpng-devel \
         freetype-devel bzip2-devel readline-devel libxslt-devel \
         gmp-devel sqlite-devel zlib-devel gettext-devel libxcrypt-devel
       ;;
@@ -170,6 +190,61 @@ build_openssl() {
 
   find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.0.0' >/dev/null || \
     die "OpenSSL installed, but libssl.so.1.0.0 was not found under ${OPENSSL_PREFIX}."
+}
+
+# ── Private libcurl with GnuTLS ──────────────────────────────────────────────
+build_curl() {
+  local existing_lib="" ca_bundle
+  existing_lib="$(find_libdir "$CURL_PREFIX" 'libcurl.so.4*' || true)"
+
+  if [ -n "$existing_lib" ] && \
+     [ -x "${CURL_PREFIX}/bin/curl-config" ] && \
+     "${CURL_PREFIX}/bin/curl-config" --version 2>/dev/null | grep -Fq "libcurl ${CURL_VERSION}" && \
+     "${CURL_PREFIX}/bin/curl-config" --ssl-backends 2>/dev/null | grep -qi 'GnuTLS' && \
+     [ "$FORCE_DEPS" != "1" ]; then
+    log "curl ${CURL_VERSION} (GnuTLS) already at ${CURL_PREFIX}"
+    return
+  fi
+
+  ca_bundle="$(find_ca_bundle)" || die "could not locate the system CA bundle."
+
+  local tarball="${BUILD_ROOT}/curl-${CURL_VERSION}.tar.xz"
+  fetch "https://curl.se/download/curl-${CURL_VERSION}.tar.xz" "$tarball"
+  rm -rf "${BUILD_ROOT}/curl-${CURL_VERSION}"
+  tar -xJf "$tarball" -C "$BUILD_ROOT"
+
+  pushd "${BUILD_ROOT}/curl-${CURL_VERSION}" >/dev/null
+    log "building curl ${CURL_VERSION} with GnuTLS -> ${CURL_PREFIX}"
+    CFLAGS="-O2 -fPIC" \
+      ./configure \
+        --prefix="${CURL_PREFIX}" \
+        --enable-shared \
+        --disable-static \
+        --with-gnutls \
+        --without-openssl \
+        --with-zlib \
+        --with-ca-bundle="${ca_bundle}" \
+        --without-libpsl \
+        --without-libidn2 \
+        --without-brotli \
+        --without-zstd \
+        --without-nghttp2 \
+        --without-nghttp3 \
+        --without-ngtcp2 \
+        --without-quiche \
+        --without-libssh2 \
+        --without-libssh \
+        --without-librtmp \
+        --disable-ldap \
+        --disable-ldaps
+    make -j"$JOBS"
+    make install
+  popd >/dev/null
+
+  find_libdir "$CURL_PREFIX" 'libcurl.so.4*' >/dev/null || \
+    die "curl installed, but libcurl.so.4 was not found under ${CURL_PREFIX}."
+  "${CURL_PREFIX}/bin/curl-config" --ssl-backends 2>/dev/null | grep -qi 'GnuTLS' || \
+    die "private curl was not built with GnuTLS."
 }
 
 # ── Private libmcrypt ────────────────────────────────────────────────────────
@@ -238,15 +313,12 @@ build_bison() {
   pushd "${BUILD_ROOT}/bison-${BISON_VERSION}" >/dev/null
     log "building bison ${BISON_VERSION} -> ${TOOLCHAIN}"
     # Old bundled gnulib declares gets(), which disappeared from modern libc.
-    # Removing only the diagnostic declaration is the compatibility workaround;
-    # Bison itself does not call gets().
     if [ -f lib/stdio.in.h ]; then
       sed -i '/_GL_WARN_ON_USE *(gets/d' lib/stdio.in.h
     fi
 
-    # Bison 2.6.4 bundles an old gnulib that detects glibc through
-    # _IO_ftrylockfile. glibc 2.28+ removed that internal definition, while
-    # _IO_EOF_SEEN remains available and is the modern compatibility check.
+    # glibc 2.28+ removed _IO_ftrylockfile. _IO_EOF_SEEN is the replacement
+    # compatibility check used by newer gnulib versions.
     if [ -f lib/fseterr.c ] && \
        grep -q 'defined _IO_ftrylockfile || __GNU_LIBRARY__ == 1' lib/fseterr.c; then
       sed -i \
@@ -315,6 +387,15 @@ fetch_php_source() {
   # This is a disposable build checkout. Remove stale configure/Makefile/object
   # output from earlier runs, while keeping the repository itself.
   git -C "$SRC_DIR" clean -q -f -d -x
+
+  # ZIP imports can lose Unix modes. Keep the checkout self-healing even though
+  # the repository now stores the correct modes.
+  chmod +x \
+    "${SRC_DIR}/buildconf" \
+    "${SRC_DIR}/build/buildcheck.sh" \
+    "${SRC_DIR}/build/config-stubs" \
+    "${SRC_DIR}/build/shtool" \
+    "${SRC_DIR}/vcsclean" 2>/dev/null || true
 }
 
 source_has_generated_files() {
@@ -336,24 +417,26 @@ build_php() {
     die "PHP ${PHP_SERIES} already exists at ${PREFIX}/sbin/php-fpm (use FORCE=1 to rebuild)."
   fi
 
-  local openssl_libdir mcrypt_libdir
+  local openssl_libdir curl_libdir mcrypt_libdir
   openssl_libdir="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.0.0')" || \
     die "private OpenSSL library directory not found."
+  curl_libdir="$(find_libdir "$CURL_PREFIX" 'libcurl.so.4*')" || \
+    die "private curl library directory not found."
   mcrypt_libdir="$(find_libdir "$MCRYPT_PREFIX" 'libmcrypt.so*')" || \
     die "private libmcrypt library directory not found."
 
-  export PATH="${TOOLCHAIN}/bin:${PATH}"
+  export PATH="${TOOLCHAIN}/bin:${CURL_PREFIX}/bin:${PATH}"
   export PHP_AUTOCONF="${TOOLCHAIN}/bin/autoconf"
   export PHP_AUTOHEADER="${TOOLCHAIN}/bin/autoheader"
-  export PKG_CONFIG_PATH="${openssl_libdir}/pkgconfig:${mcrypt_libdir}/pkgconfig:${PKG_CONFIG_PATH:-}"
-  export LD_LIBRARY_PATH="${openssl_libdir}:${mcrypt_libdir}:${LD_LIBRARY_PATH:-}"
+  export PKG_CONFIG_PATH="${curl_libdir}/pkgconfig:${openssl_libdir}/pkgconfig:${mcrypt_libdir}/pkgconfig:${PKG_CONFIG_PATH:-}"
+  export LD_LIBRARY_PATH="${curl_libdir}:${openssl_libdir}:${mcrypt_libdir}:${LD_LIBRARY_PATH:-}"
 
   # GCC 10+ defaults to -fno-common; GCC 14 promotes several old-C diagnostics
   # to errors. These flags preserve the historical compiler behaviour expected
   # by PHP 5.3 without weakening the host compiler globally.
   export CFLAGS="-O2 -fPIC -fcommon -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=int-conversion ${CFLAGS:-}"
-  export CPPFLAGS="-D_DEFAULT_SOURCE -I${OPENSSL_PREFIX}/include -I${MCRYPT_PREFIX}/include ${CPPFLAGS:-}"
-  export LDFLAGS="-L${openssl_libdir} -L${mcrypt_libdir} -Wl,-rpath,${openssl_libdir} -Wl,-rpath,${mcrypt_libdir} ${LDFLAGS:-}"
+  export CPPFLAGS="-D_DEFAULT_SOURCE -I${CURL_PREFIX}/include -I${OPENSSL_PREFIX}/include -I${MCRYPT_PREFIX}/include ${CPPFLAGS:-}"
+  export LDFLAGS="-L${curl_libdir} -L${openssl_libdir} -L${mcrypt_libdir} -Wl,-rpath,${curl_libdir} -Wl,-rpath,${openssl_libdir} -Wl,-rpath,${mcrypt_libdir} ${LDFLAGS:-}"
 
   pushd "$SRC_DIR" >/dev/null
     if source_has_generated_files; then
@@ -400,7 +483,7 @@ build_php() {
       --enable-sysvmsg --enable-sysvsem --enable-sysvshm \
       --enable-zip \
       --with-bz2 \
-      --with-curl \
+      --with-curl="${CURL_PREFIX}" \
       --with-gd --with-jpeg-dir=/usr --with-png-dir=/usr --with-freetype-dir=/usr \
       --with-gettext \
       --with-gmp \
@@ -429,6 +512,7 @@ verify() {
   local php_bin="${PREFIX}/bin/php"
   local fpm_bin="${PREFIX}/sbin/php-fpm"
   local modules module actual_version openssl_text
+  local curl_version curl_tls curl_libdir ldd_text smoke_rc
 
   [ -x "$php_bin" ] || die "expected CLI binary missing: ${php_bin}"
   [ -x "$fpm_bin" ] || die "expected FPM binary missing: ${fpm_bin}"
@@ -448,11 +532,55 @@ verify() {
     grep -Fxq "$module" <<<"$modules" || die "expected PHP module missing: ${module}"
   done
 
+  curl_version="$("$php_bin" -n -r '$v=curl_version(); echo $v["version"];' 2>/dev/null)"
+  curl_tls="$("$php_bin" -n -r '$v=curl_version(); echo $v["ssl_version"];' 2>/dev/null)"
+  [ "$curl_version" = "$CURL_VERSION" ] || \
+    die "PHP loaded libcurl ${curl_version:-unknown}, expected ${CURL_VERSION}."
+  case "$curl_tls" in
+    *GnuTLS*) ;;
+    *) die "PHP's libcurl uses an unexpected TLS backend: ${curl_tls:-unknown}" ;;
+  esac
+
+  curl_libdir="$(find_libdir "$CURL_PREFIX" 'libcurl.so.4*')" || \
+    die "private curl library directory not found during verification."
+  ldd_text="$(ldd "$php_bin" 2>/dev/null)"
+
+  grep -F "libcurl.so.4 => ${curl_libdir}/" <<<"$ldd_text" >/dev/null || \
+    die "PHP is not loading the private libcurl from ${curl_libdir}."
+  if grep -Eq 'lib(ssl|crypto)\.so\.3([[:space:]]|$)' <<<"$ldd_text"; then
+    printf '%s\n' "$ldd_text" | grep -E 'lib(curl|ssl|crypto)\.so' >&2 || true
+    die "OpenSSL 3 is still loaded; refusing an unsafe mixed-ABI PHP build."
+  fi
+
+  # This catches the exact mixed-OpenSSL regression that previously caused
+  # curl_exec() to segfault. Network/TLS policy failures warn, signals fail.
+  if "$php_bin" -n -r '
+    $c = curl_init("https://example.com/");
+    curl_setopt($c, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($c, CURLOPT_TIMEOUT, 15);
+    $data = curl_exec($c);
+    if ($data === false) {
+        fwrite(STDERR, curl_error($c));
+        curl_close($c);
+        exit(2);
+    }
+    curl_close($c);
+  ' >/dev/null; then
+    log "HTTPS curl smoke test passed"
+  else
+    smoke_rc=$?
+    case "$smoke_rc" in
+      134|139) die "HTTPS curl smoke test crashed (exit ${smoke_rc})." ;;
+      *) warn "HTTPS curl smoke test could not complete (exit ${smoke_rc}); build linkage is otherwise valid." ;;
+    esac
+  fi
+
   log "installed: $("$php_bin" -n -v | sed -n '1p')"
   log "FPM: $("$fpm_bin" -v 2>&1 | sed -n '1p')"
   log "OpenSSL: ${openssl_text}"
-  log "dynamic SSL libraries:"
-  ldd "$php_bin" 2>/dev/null | grep -E 'lib(ssl|crypto)\.so' | sed 's/^/    /' || true
+  log "libcurl: ${curl_version} (${curl_tls})"
+  log "dynamic TLS libraries:"
+  printf '%s\n' "$ldd_text" | grep -E 'lib(curl|ssl|crypto|gnutls)\.so' | sed 's/^/    /' || true
 
   cat <<EOF
 
@@ -479,6 +607,7 @@ main() {
   need_command make
 
   build_openssl
+  build_curl
   build_libmcrypt
   fetch_php_source
 
