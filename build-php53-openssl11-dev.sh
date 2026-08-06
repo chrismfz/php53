@@ -2,7 +2,7 @@
 # Temporary development wrapper for the PHP 5.3 -> OpenSSL 1.1.1 port.
 #
 # It loads the normal build script without executing its final main call,
-# overrides fetch_php_source() to apply the staged compatibility transformer to
+# overrides fetch_php_source() to apply the staged compatibility transformers to
 # the disposable checkout, and then runs the normal build pipeline.
 
 set -Eeuo pipefail
@@ -15,7 +15,7 @@ BASE_SCRIPT="${REPO_DIR}/build-php53.sh"
   exit 1
 }
 command -v python3 >/dev/null 2>&1 || {
-  printf 'ERROR: python3 is required for the staged OpenSSL 1.1 transformer.\n' >&2
+  printf 'ERROR: python3 is required for the staged OpenSSL 1.1 transformers.\n' >&2
   exit 1
 }
 
@@ -37,6 +37,7 @@ eval "$(declare -f fetch_php_source | sed '1s/fetch_php_source/original_fetch_ph
 fetch_php_source() {
   original_fetch_php_source
   python3 "${SRC_DIR}/tools/apply-openssl11-compat.py" "$SRC_DIR"
+  python3 "${SRC_DIR}/tools/apply-openssl11-compat-stage2.py" "$SRC_DIR"
 }
 
 main "$@"
