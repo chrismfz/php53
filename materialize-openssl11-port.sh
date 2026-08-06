@@ -40,6 +40,24 @@ fi
 printf '==> applying OpenSSL 1.1 source compatibility stage 1\n'
 python3 tools/apply-openssl11-compat.py "$REPO_DIR"
 
+# The original stage-2 helper searched for PHP_FUNCTION(name) without requiring
+# the opening brace, so functions that also have forward declarations (notably
+# openssl_digest) could resolve to the prototype instead of the definition.
+# Tighten the helper locally before running it; the helper is deleted after the
+# final source files are committed.
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("tools/apply-openssl11-compat-stage2.py")
+text = path.read_text(encoding="utf-8")
+old = '    marker = "PHP_FUNCTION(%s)" % function_name\n'
+new = '    marker = "PHP_FUNCTION(%s)\\n{" % function_name\n'
+count = text.count(old)
+if count != 1:
+    raise SystemExit("stage-2 definition matcher: expected one marker assignment, found %d" % count)
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
+PY
+
 # PHP 5.3's openssl_open() has two equivalent cleanup branches with different
 # whitespace and indentation. Stage 2 intentionally uses strict source-shape
 # checks, so normalize this one function temporarily and restore its formatting
@@ -49,7 +67,7 @@ from pathlib import Path
 
 path = Path("ext/openssl/openssl.c")
 text = path.read_text(encoding="utf-8")
-marker = "PHP_FUNCTION(openssl_open)"
+marker = "PHP_FUNCTION(openssl_open)\n{"
 start = text.index(marker)
 end = text.index("\n/* }}} */", start)
 block = text[start:end]
