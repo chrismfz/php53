@@ -141,7 +141,7 @@ install_deps() {
       apt-get install -y --no-install-recommends \
         build-essential ca-certificates curl git patch pkg-config \
         perl m4 tar gzip bzip2 xz-utils \
-        libxml2-dev libgnutls28-dev libjpeg-dev libpng-dev \
+        libxml2-dev libgnutls28-dev nettle-dev libjpeg-dev libpng-dev \
         libfreetype6-dev libbz2-dev libreadline-dev libxslt1-dev \
         libgmp-dev libsqlite3-dev zlib1g-dev libgettextpo-dev libcrypt-dev
       ;;
@@ -153,7 +153,7 @@ install_deps() {
         gcc gcc-c++ make ca-certificates curl git patch pkgconf-pkg-config \
         perl perl-FindBin perl-IPC-Cmd perl-File-Compare perl-Data-Dumper \
         m4 tar gzip bzip2 xz \
-        libxml2-devel gnutls-devel libjpeg-turbo-devel libpng-devel \
+        libxml2-devel gnutls-devel nettle-devel libjpeg-turbo-devel libpng-devel \
         freetype-devel bzip2-devel readline-devel libxslt-devel \
         gmp-devel sqlite-devel zlib-devel gettext-devel libxcrypt-devel
       ;;
@@ -234,7 +234,6 @@ build_curl() {
         --without-quiche \
         --without-libssh2 \
         --without-libssh \
-        --without-librtmp \
         --disable-ldap \
         --disable-ldaps
     make -j"$JOBS"
