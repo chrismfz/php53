@@ -37,6 +37,24 @@ eval "$(declare -f fetch_php_source | sed '1s/fetch_php_source/original_fetch_ph
 fetch_php_source() {
   original_fetch_php_source
   python3 "${SRC_DIR}/tools/apply-openssl11-compat.py" "$SRC_DIR"
+
+  # PHP 5.3 has one trailing space in openssl_open() that makes two otherwise
+  # identical failure branches differ. Normalize only that exact legacy line so
+  # the stage-2 transformer can keep strict occurrence checks.
+  python3 - "${SRC_DIR}/ext/openssl/openssl.c" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old = "\t\t\tif (keyresource == -1) { \n"
+new = "\t\t\tif (keyresource == -1) {\n"
+count = text.count(old)
+if count != 1:
+    raise SystemExit("OpenSSL source normalization: expected one trailing-space keyresource line, found %d" % count)
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
+PY
+
   python3 "${SRC_DIR}/tools/apply-openssl11-compat-stage2.py" "$SRC_DIR"
 }
 
