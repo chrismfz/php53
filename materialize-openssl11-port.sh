@@ -40,11 +40,7 @@ fi
 printf '==> applying OpenSSL 1.1 source compatibility stage 1\n'
 python3 tools/apply-openssl11-compat.py "$REPO_DIR"
 
-# The original stage-2 helper searched for PHP_FUNCTION(name) without requiring
-# the opening brace, so functions that also have forward declarations (notably
-# openssl_digest) could resolve to the prototype instead of the definition.
-# Tighten the helper locally before running it; the helper is deleted after the
-# final source files are committed.
+# Require a real PHP function definition, not a forward declaration.
 python3 - <<'PY'
 from pathlib import Path
 
@@ -59,9 +55,8 @@ path.write_text(text.replace(old, new, 1), encoding="utf-8")
 PY
 
 # PHP 5.3's openssl_open() has two equivalent cleanup branches with different
-# whitespace and indentation. Stage 2 intentionally uses strict source-shape
-# checks, so normalize this one function temporarily and restore its formatting
-# after the transform.
+# whitespace and indentation. Normalize this one function temporarily so the
+# strict second-stage transform can match both branches.
 python3 - <<'PY'
 from pathlib import Path
 
@@ -84,8 +79,7 @@ PY
 printf '==> applying OpenSSL 1.1 source compatibility stage 2\n'
 python3 tools/apply-openssl11-compat-stage2.py "$REPO_DIR"
 
-# Restore normal indentation in the nested openssl_open() failure branch after
-# stage 2 has inserted EVP_CIPHER_CTX_free().
+# Restore normal indentation in the nested openssl_open() failure branch.
 python3 - <<'PY'
 from pathlib import Path
 
@@ -105,6 +99,27 @@ if count != 1:
 path.write_text(text.replace(old, new, 1), encoding="utf-8")
 PY
 
+# The donor transformations preserve a few legacy trailing spaces and introduce
+# one space-before-tab indentation artifact. Clean only the two materialized C
+# files before git diff --check.
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+for name in ("ext/openssl/openssl.c", "ext/openssl/xp_ssl.c"):
+    path = Path(name)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    cleaned = []
+    for line in lines:
+        line = line.rstrip(" \t")
+        while re.match(r"^ +\t", line):
+            line = re.sub(r"^ +\t", "\t", line, count=1)
+        cleaned.append(line)
+    path.write_text("\n".join(cleaned) + "\n", encoding="utf-8")
+PY
+
+git diff --check
+
 printf '==> removing temporary development scaffolding\n'
 rm -f \
   build-php53-openssl11-dev.sh \
@@ -113,7 +128,6 @@ rm -f \
   .github/workflows/materialize-openssl11-port.yml \
   materialize-openssl11-port.sh
 
-# Remove the now-empty workflow directory when applicable.
 rmdir .github/workflows 2>/dev/null || true
 rmdir .github 2>/dev/null || true
 
