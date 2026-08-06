@@ -243,6 +243,17 @@ build_bison() {
     if [ -f lib/stdio.in.h ]; then
       sed -i '/_GL_WARN_ON_USE *(gets/d' lib/stdio.in.h
     fi
+
+    # Bison 2.6.4 bundles an old gnulib that detects glibc through
+    # _IO_ftrylockfile. glibc 2.28+ removed that internal definition, while
+    # _IO_EOF_SEEN remains available and is the modern compatibility check.
+    if [ -f lib/fseterr.c ] && \
+       grep -q 'defined _IO_ftrylockfile || __GNU_LIBRARY__ == 1' lib/fseterr.c; then
+      sed -i \
+        's/defined _IO_ftrylockfile || __GNU_LIBRARY__ == 1/defined _IO_EOF_SEEN || defined _IO_ftrylockfile || __GNU_LIBRARY__ == 1/' \
+        lib/fseterr.c
+    fi
+
     CFLAGS="-O2 -fPIC -fcommon -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=incompatible-pointer-types" \
     CPPFLAGS="-D_DEFAULT_SOURCE" \
       ./configure --prefix="$TOOLCHAIN"
