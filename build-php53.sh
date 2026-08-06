@@ -6,12 +6,12 @@
 #
 #   /opt/ngm/php/5.3/sbin/php-fpm
 #
-# PHP 5.3 cannot use OpenSSL 1.1+ without a large source backport: its OpenSSL
-# extension accesses structures that became opaque in 1.1. This script therefore
-# builds a private OpenSSL 1.0.2u under a separate prefix.
+# PHP 5.3 needs source compatibility backports for OpenSSL 1.1 because its
+# OpenSSL extension accesses structures that became opaque in 1.1. This script
+# now targets private OpenSSL 1.1.1w, matching the PHP 5.6 legacy runtime.
 #
 # The host libcurl must not be used: on current distributions it loads OpenSSL 3,
-# which conflicts with PHP's private OpenSSL 1.0.2 in the same process and causes
+# which must not be mixed with PHP's private OpenSSL in the same process and can cause
 # curl_exec() to segfault. A private current libcurl is built with GnuTLS instead,
 # so PHP has only one OpenSSL ABI loaded while HTTPS through ext/curl remains safe.
 #
@@ -43,8 +43,8 @@ BUILD_ROOT="${BUILD_ROOT:-/usr/local/src/ngm-php-build}"
 SRC_DIR="${BUILD_ROOT}/php-${PHP_RELEASE}"
 
 # Keep incompatible components isolated from the host and other PHP builds.
-OPENSSL_VERSION="1.0.2u"
-OPENSSL_PREFIX="${OPENSSL_PREFIX:-${NGM_ROOT}/openssl-1.0.2}"
+OPENSSL_VERSION="1.1.1w"
+OPENSSL_PREFIX="${OPENSSL_PREFIX:-${NGM_ROOT}/openssl-1.1}"
 CURL_VERSION="8.21.0"
 CURL_PREFIX="${CURL_PREFIX:-${NGM_ROOT}/curl-gnutls}"
 MCRYPT_VERSION="2.5.8"
@@ -160,36 +160,33 @@ install_deps() {
   esac
 }
 
-# ── Private OpenSSL 1.0.2 ────────────────────────────────────────────────────
+# ── Private OpenSSL 1.1.1 ────────────────────────────────────────────────────
 build_openssl() {
   local existing_lib=""
-  existing_lib="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.0.0' || true)"
+  existing_lib="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.1' || true)"
   if [ -n "$existing_lib" ] && [ "$FORCE_DEPS" != "1" ]; then
     log "OpenSSL ${OPENSSL_VERSION} already at ${OPENSSL_PREFIX}"
     return
   fi
 
   local tarball="${BUILD_ROOT}/openssl-${OPENSSL_VERSION}.tar.gz"
-  fetch "https://www.openssl.org/source/old/1.0.2/openssl-${OPENSSL_VERSION}.tar.gz" "$tarball"
+  fetch "https://github.com/openssl/openssl/releases/download/OpenSSL_${OPENSSL_VERSION//./_}/openssl-${OPENSSL_VERSION}.tar.gz" "$tarball"
 
   rm -rf "${BUILD_ROOT}/openssl-${OPENSSL_VERSION}"
   tar -xzf "$tarball" -C "$BUILD_ROOT"
 
   pushd "${BUILD_ROOT}/openssl-${OPENSSL_VERSION}" >/dev/null
     log "building OpenSSL ${OPENSSL_VERSION} -> ${OPENSSL_PREFIX}"
-    # Do not disable SSLv3 here: PHP 5.3 references SSLv3_* methods without
-    # OPENSSL_NO_SSL3 guards. Protocol policy belongs in application/FPM config.
     ./config \
       --prefix="${OPENSSL_PREFIX}" \
       --openssldir="${OPENSSL_PREFIX}" \
       shared zlib -fPIC
-    make depend
     make -j"$JOBS"
     make install_sw
   popd >/dev/null
 
-  find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.0.0' >/dev/null || \
-    die "OpenSSL installed, but libssl.so.1.0.0 was not found under ${OPENSSL_PREFIX}."
+  find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.1' >/dev/null || \
+    die "OpenSSL installed, but libssl.so.1.1 was not found under ${OPENSSL_PREFIX}."
 }
 
 # ── Private libcurl with GnuTLS ──────────────────────────────────────────────
@@ -417,7 +414,7 @@ build_php() {
   fi
 
   local openssl_libdir curl_libdir mcrypt_libdir
-  openssl_libdir="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.0.0')" || \
+  openssl_libdir="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.1')" || \
     die "private OpenSSL library directory not found."
   curl_libdir="$(find_libdir "$CURL_PREFIX" 'libcurl.so.4*')" || \
     die "private curl library directory not found."
@@ -522,7 +519,7 @@ verify() {
 
   openssl_text="$("$php_bin" -n -r 'echo OPENSSL_VERSION_TEXT;' 2>/dev/null)"
   case "$openssl_text" in
-    *"OpenSSL 1.0.2u"*) ;;
+    *"OpenSSL 1.1.1w"*) ;;
     *) die "PHP loaded an unexpected OpenSSL: ${openssl_text:-unknown}" ;;
   esac
 
