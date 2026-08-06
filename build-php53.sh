@@ -135,7 +135,7 @@ install_deps() {
         m4 tar gzip bzip2 xz \
         libxml2-devel libcurl-devel libjpeg-turbo-devel libpng-devel \
         freetype-devel bzip2-devel readline-devel libxslt-devel \
-        gmp-devel sqlite-devel zlib-devel gettext-devel libcrypt-devel
+        gmp-devel sqlite-devel zlib-devel gettext-devel libxcrypt-devel
       ;;
   esac
 }
