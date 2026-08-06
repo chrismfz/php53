@@ -65,7 +65,7 @@ text = text.replace("(EVP_MD *) EVP_dss1()", "(EVP_MD *) EVP_sha1()")
 
 text = exact(text, "\tEVP_MD_CTX md_ctx;", "\tEVP_MD_CTX *md_ctx = NULL;", 2, "EVP_MD_CTX declaration")
 text = once(text, "\tEVP_MD_CTX     md_ctx;", "\tEVP_MD_CTX *md_ctx = NULL;", "EVP verify context declaration")
-text = exact(text, "&md_ctx", "md_ctx", 9, "EVP_MD_CTX address")
+text = exact(text, "&md_ctx", "md_ctx", 11, "EVP_MD_CTX address")
 text = exact(text, "EVP_MD_CTX_cleanup(md_ctx);", "EVP_MD_CTX_destroy(md_ctx);", 2, "EVP_MD_CTX cleanup")
 
 text = once(
@@ -138,8 +138,8 @@ static zend_bool php_openssl_validate_iv''',
 
 text = exact(text, "\tEVP_CIPHER_CTX ctx;", "\tEVP_CIPHER_CTX *ctx = NULL;", 2, "EVP_CIPHER_CTX ctx declaration")
 text = exact(text, "\tEVP_CIPHER_CTX cipher_ctx;", "\tEVP_CIPHER_CTX *cipher_ctx = NULL;", 2, "EVP_CIPHER_CTX cipher declaration")
-text = exact(text, "&ctx", "ctx", 7, "EVP_CIPHER_CTX ctx address")
-text = exact(text, "&cipher_ctx", "cipher_ctx", 10, "EVP_CIPHER_CTX cipher address")
+text = exact(text, "&ctx", "ctx", 9, "EVP_CIPHER_CTX ctx address")
+text = exact(text, "&cipher_ctx", "cipher_ctx", 12, "EVP_CIPHER_CTX cipher address")
 
 text = once(
     text,
