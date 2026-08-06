@@ -40,9 +40,10 @@ fi
 printf '==> applying OpenSSL 1.1 source compatibility stage 1\n'
 python3 tools/apply-openssl11-compat.py "$REPO_DIR"
 
-# PHP 5.3's openssl_open() has insignificant trailing whitespace differences
-# between two equivalent cleanup branches. Normalize only this function before
-# the strict second-stage transform.
+# PHP 5.3's openssl_open() has two equivalent cleanup branches with different
+# whitespace and indentation. Stage 2 intentionally uses strict source-shape
+# checks, so normalize this one function temporarily and restore its formatting
+# after the transform.
 python3 - <<'PY'
 from pathlib import Path
 
@@ -52,12 +53,39 @@ marker = "PHP_FUNCTION(openssl_open)"
 start = text.index(marker)
 end = text.index("\n/* }}} */", start)
 block = text[start:end]
-normalized = "\n".join(line.rstrip(" \t") for line in block.split("\n"))
-path.write_text(text[:start] + normalized + text[end:], encoding="utf-8")
+block = "\n".join(line.rstrip(" \t") for line in block.split("\n"))
+old = "\t\t\tefree(buf);\n\t\t\tif (keyresource == -1) {\n"
+new = "\t\tefree(buf);\n\t\tif (keyresource == -1) {\n"
+count = block.count(old)
+if count != 1:
+    raise SystemExit("openssl_open normalization: expected one nested cleanup branch, found %d" % count)
+block = block.replace(old, new, 1)
+path.write_text(text[:start] + block + text[end:], encoding="utf-8")
 PY
 
 printf '==> applying OpenSSL 1.1 source compatibility stage 2\n'
 python3 tools/apply-openssl11-compat-stage2.py "$REPO_DIR"
+
+# Restore normal indentation in the nested openssl_open() failure branch after
+# stage 2 has inserted EVP_CIPHER_CTX_free().
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("ext/openssl/openssl.c")
+text = path.read_text(encoding="utf-8")
+old = '''\t\tif (!EVP_OpenFinal(ctx, buf + len1, &len2) || (len1 + len2 == 0)) {
+\t\tefree(buf);
+\t\tEVP_CIPHER_CTX_free(ctx);
+\t\tif (keyresource == -1) {'''
+new = '''\t\tif (!EVP_OpenFinal(ctx, buf + len1, &len2) || (len1 + len2 == 0)) {
+\t\t\tefree(buf);
+\t\t\tEVP_CIPHER_CTX_free(ctx);
+\t\t\tif (keyresource == -1) {'''
+count = text.count(old)
+if count != 1:
+    raise SystemExit("openssl_open formatting restore: expected one transformed nested branch, found %d" % count)
+path.write_text(text.replace(old, new, 1), encoding="utf-8")
+PY
 
 printf '==> removing temporary development scaffolding\n'
 rm -f \
