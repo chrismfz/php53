@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - .github/workflows/remove-snmp.yml
+      - .github/remove-snmp.py
 
 permissions:
   contents: write
