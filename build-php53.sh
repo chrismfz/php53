@@ -204,8 +204,7 @@ install_deps() {
         libxml2-devel gnutls-devel nettle-devel libjpeg-turbo-devel libpng-devel \
         freetype-devel bzip2-devel readline-devel libxslt-devel \
         gmp-devel sqlite-devel zlib-devel gettext-devel libxcrypt-devel \
-        libpq-devel openldap-devel cyrus-sasl-devel libtidy-devel aspell-devel \
-
+        libpq-devel openldap-devel cyrus-sasl-devel libtidy-devel aspell-devel
       ;;
   esac
 }
