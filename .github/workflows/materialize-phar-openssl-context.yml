@@ -1,0 +1,61 @@
+name: Materialize PHP 5.3 PHAR OpenSSL context fix
+
+on:
+  push:
+    paths:
+      - .github/workflows/materialize-phar-openssl-context.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch tracked PHAR source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('ext/phar/util.c')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              ('\t\t\tEVP_MD_CTX md_ctx;\n', '\t\t\tEVP_MD_CTX *md_ctx;\n', 'context declaration'),
+              ('\t\t\tEVP_VerifyInit(&md_ctx, mdtype);\n', '\t\t\tmd_ctx = EVP_MD_CTX_create();\n\t\t\tEVP_VerifyInit(md_ctx, mdtype);\n', 'context allocation/init'),
+              ('\t\t\t\tEVP_VerifyUpdate (&md_ctx, buf, len);\n', '\t\t\t\tEVP_VerifyUpdate (md_ctx, buf, len);\n', 'verify update'),
+              ('\t\t\tif (EVP_VerifyFinal(&md_ctx, (unsigned char *)sig, sig_len, key) != 1) {\n', '\t\t\tif (EVP_VerifyFinal(md_ctx, (unsigned char *)sig, sig_len, key) != 1) {\n', 'verify final'),
+              ('\t\t\t\tEVP_MD_CTX_cleanup(&md_ctx);\n', '\t\t\t\tEVP_MD_CTX_destroy(md_ctx);\n', 'failure cleanup'),
+              ('\t\t\tEVP_MD_CTX_cleanup(&md_ctx);\n', '\t\t\tEVP_MD_CTX_destroy(md_ctx);\n', 'success cleanup'),
+          ]
+
+          for old, new, label in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit('%s: expected one match, found %d' % (label, count))
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git diff --check
+          test "$(git diff --name-only)" = "ext/phar/util.c"
+          grep -Fq 'EVP_MD_CTX *md_ctx;' ext/phar/util.c
+          grep -Fq 'md_ctx = EVP_MD_CTX_create();' ext/phar/util.c
+          grep -Fq 'EVP_MD_CTX_destroy(md_ctx);' ext/phar/util.c
+
+      - name: Commit PHAR source backport
+        shell: bash
+        run: |
+          git config user.name "ngm-php-maintenance"
+          git config user.email "ngm-php-maintenance@users.noreply.github.com"
+          git add ext/phar/util.c
+          test "$(git diff --cached --name-only)" = "ext/phar/util.c"
+          git commit -m "Backport opaque EVP context support to PHAR"
+          git push origin HEAD:main
