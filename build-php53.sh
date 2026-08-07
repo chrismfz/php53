@@ -6,14 +6,14 @@
 #
 #   /opt/ngm/php/5.3/sbin/php-fpm
 #
-# PHP 5.3 needs source compatibility backports for OpenSSL 1.1 because its
-# OpenSSL extension accesses structures that became opaque in 1.1. This script
-# now targets private OpenSSL 1.1.1w, matching the PHP 5.6 legacy runtime.
+# PHP 5.3 carries source compatibility backports for modern OpenSSL and
+# targets the private OpenSSL 3.5 LTS runtime used by the maintained NGM builds.
+# Compatibility/security changes live in the tracked PHP source.
 #
-# The host libcurl must not be used: on current distributions it loads OpenSSL 3,
-# which must not be mixed with PHP's private OpenSSL in the same process and can cause
-# curl_exec() to segfault. A private current libcurl is built with GnuTLS instead,
-# so PHP has only one OpenSSL ABI loaded while HTTPS through ext/curl remains safe.
+# The host libcurl must not be used: it may bind the process to distro OpenSSL 3
+# instead of NGM's private OpenSSL 3.5 and undermine runtime isolation. A private
+# current libcurl is built with GnuTLS instead, so ext/curl cannot introduce a
+# second OpenSSL implementation into the PHP process.
 #
 # The php53 repository is a raw git tree and may have no generated
 # configure/parser/scanner files. PHP 5.3 also requires Autoconf <= 2.59 and only
@@ -43,8 +43,8 @@ BUILD_ROOT="${BUILD_ROOT:-/usr/local/src/ngm-php-build}"
 SRC_DIR="${BUILD_ROOT}/php-${PHP_RELEASE}"
 
 # Keep incompatible components isolated from the host and other PHP builds.
-OPENSSL_VERSION="1.1.1w"
-OPENSSL_PREFIX="${OPENSSL_PREFIX:-${NGM_ROOT}/openssl-1.1}"
+OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.7}"
+OPENSSL_PREFIX="${OPENSSL_PREFIX:-${NGM_ROOT}/openssl-3.5}"
 CURL_VERSION="8.21.0"
 CURL_PREFIX="${CURL_PREFIX:-${NGM_ROOT}/curl-gnutls}"
 MCRYPT_VERSION="2.5.8"
@@ -160,17 +160,20 @@ install_deps() {
   esac
 }
 
-# ── Private OpenSSL 1.1.1 ────────────────────────────────────────────────────
+# ── Private OpenSSL 3.5 LTS ─────────────────────────────────────────────────
 build_openssl() {
-  local existing_lib=""
-  existing_lib="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.1' || true)"
-  if [ -n "$existing_lib" ] && [ "$FORCE_DEPS" != "1" ]; then
-    log "OpenSSL ${OPENSSL_VERSION} already at ${OPENSSL_PREFIX}"
-    return
-  fi
+  local existing_lib="" tarball="${BUILD_ROOT}/openssl-${OPENSSL_VERSION}.tar.gz"
+  mkdir -p "$BUILD_ROOT"
 
-  local tarball="${BUILD_ROOT}/openssl-${OPENSSL_VERSION}.tar.gz"
-  fetch "https://github.com/openssl/openssl/releases/download/OpenSSL_${OPENSSL_VERSION//./_}/openssl-${OPENSSL_VERSION}.tar.gz" "$tarball"
+  fetch "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" "$tarball"
+
+  existing_lib="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.3' || true)"
+  if [ -n "$existing_lib" ] && [ -x "${OPENSSL_PREFIX}/bin/openssl" ] && [ "$FORCE_DEPS" != "1" ]; then
+    if LD_LIBRARY_PATH="$existing_lib" "${OPENSSL_PREFIX}/bin/openssl" version 2>/dev/null | grep -Fq "OpenSSL ${OPENSSL_VERSION}"; then
+      log "OpenSSL ${OPENSSL_VERSION} already at ${OPENSSL_PREFIX}"
+      return
+    fi
+  fi
 
   rm -rf "${BUILD_ROOT}/openssl-${OPENSSL_VERSION}"
   tar -xzf "$tarball" -C "$BUILD_ROOT"
@@ -185,8 +188,28 @@ build_openssl() {
     make install_sw
   popd >/dev/null
 
-  find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.1' >/dev/null || \
-    die "OpenSSL installed, but libssl.so.1.1 was not found under ${OPENSSL_PREFIX}."
+  find_libdir "$OPENSSL_PREFIX" 'libssl.so.3' >/dev/null || \
+    die "OpenSSL installed, but libssl.so.3 was not found under ${OPENSSL_PREFIX}."
+}
+
+provision_openssl_runtime_files() {
+  local tarball="${BUILD_ROOT}/openssl-${OPENSSL_VERSION}.tar.gz" ca_bundle
+
+  install -d -m 755 "${OPENSSL_PREFIX}/certs"
+  install -d -m 700 "${OPENSSL_PREFIX}/private"
+
+  if [ ! -s "${OPENSSL_PREFIX}/openssl.cnf" ]; then
+    [ -s "$tarball" ] || die "OpenSSL source tarball missing; cannot provision openssl.cnf."
+    log "installing OpenSSL ${OPENSSL_VERSION} configuration"
+    tar -xOf "$tarball" "openssl-${OPENSSL_VERSION}/apps/openssl.cnf" > "${OPENSSL_PREFIX}/openssl.cnf"
+    chmod 644 "${OPENSSL_PREFIX}/openssl.cnf"
+  fi
+
+  ca_bundle="$(find_ca_bundle)" || die "could not locate the system CA bundle."
+  ln -sfn "$ca_bundle" "${OPENSSL_PREFIX}/cert.pem"
+
+  [ -r "${OPENSSL_PREFIX}/openssl.cnf" ] || die "OpenSSL configuration is not readable."
+  [ -r "${OPENSSL_PREFIX}/cert.pem" ] || die "OpenSSL CA bundle link is not readable."
 }
 
 # ── Private libcurl with GnuTLS ──────────────────────────────────────────────
@@ -413,8 +436,8 @@ build_php() {
     die "PHP ${PHP_SERIES} already exists at ${PREFIX}/sbin/php-fpm (use FORCE=1 to rebuild)."
   fi
 
-  local openssl_libdir curl_libdir mcrypt_libdir
-  openssl_libdir="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.1.1')" || \
+  local openssl_libdir curl_libdir mcrypt_libdir openssl_pc_prefix
+  openssl_libdir="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.3')" || \
     die "private OpenSSL library directory not found."
   curl_libdir="$(find_libdir "$CURL_PREFIX" 'libcurl.so.4*')" || \
     die "private curl library directory not found."
@@ -433,6 +456,11 @@ build_php() {
   export CFLAGS="-O2 -fPIC -fcommon -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=int-conversion ${CFLAGS:-}"
   export CPPFLAGS="-D_DEFAULT_SOURCE -I${CURL_PREFIX}/include -I${OPENSSL_PREFIX}/include -I${MCRYPT_PREFIX}/include ${CPPFLAGS:-}"
   export LDFLAGS="-L${curl_libdir} -L${openssl_libdir} -L${mcrypt_libdir} -Wl,-rpath,${curl_libdir} -Wl,-rpath,${openssl_libdir} -Wl,-rpath,${mcrypt_libdir} ${LDFLAGS:-}"
+
+  pkg-config --exists openssl || die "private OpenSSL pkg-config metadata not found."
+  openssl_pc_prefix="$(pkg-config --variable=prefix openssl)"
+  [ "$openssl_pc_prefix" = "$OPENSSL_PREFIX" ] || \
+    die "pkg-config resolved OpenSSL from ${openssl_pc_prefix}, expected ${OPENSSL_PREFIX}."
 
   pushd "$SRC_DIR" >/dev/null
     if source_has_generated_files; then
@@ -464,7 +492,7 @@ build_php() {
       --enable-fpm \
       --with-fpm-user="${FPM_USER}" \
       --with-fpm-group="${FPM_GROUP}" \
-      --with-openssl="${OPENSSL_PREFIX}" \
+      --with-openssl \
       --with-zlib \
       --enable-pdo \
       --enable-mbstring \
@@ -501,6 +529,10 @@ build_php() {
     if [ ! -f "${PREFIX}/etc/php.ini" ]; then
       cp php.ini-production "${PREFIX}/etc/php.ini"
     fi
+
+    if [ ! -f "${PREFIX}/etc/php-fpm.conf" ] && [ -f "${PREFIX}/etc/php-fpm.conf.default" ]; then
+      cp "${PREFIX}/etc/php-fpm.conf.default" "${PREFIX}/etc/php-fpm.conf"
+    fi
   popd >/dev/null
 }
 
@@ -508,7 +540,7 @@ verify() {
   local php_bin="${PREFIX}/bin/php"
   local fpm_bin="${PREFIX}/sbin/php-fpm"
   local modules module actual_version openssl_text
-  local curl_version curl_tls curl_libdir ldd_text smoke_rc
+  local curl_version curl_tls curl_libdir openssl_libdir ldd_text smoke_rc
 
   [ -x "$php_bin" ] || die "expected CLI binary missing: ${php_bin}"
   [ -x "$fpm_bin" ] || die "expected FPM binary missing: ${fpm_bin}"
@@ -519,7 +551,7 @@ verify() {
 
   openssl_text="$("$php_bin" -n -r 'echo OPENSSL_VERSION_TEXT;' 2>/dev/null)"
   case "$openssl_text" in
-    *"OpenSSL 1.1.1w"*) ;;
+    *"OpenSSL ${OPENSSL_VERSION}"*) ;;
     *) die "PHP loaded an unexpected OpenSSL: ${openssl_text:-unknown}" ;;
   esac
 
@@ -539,13 +571,20 @@ verify() {
 
   curl_libdir="$(find_libdir "$CURL_PREFIX" 'libcurl.so.4*')" || \
     die "private curl library directory not found during verification."
+  openssl_libdir="$(find_libdir "$OPENSSL_PREFIX" 'libssl.so.3')" || \
+    die "private OpenSSL library directory not found during verification."
   ldd_text="$(ldd "$php_bin" 2>/dev/null)"
+
+  grep -F "libssl.so.3 => ${openssl_libdir}/" <<<"$ldd_text" >/dev/null || \
+    die "PHP is not loading private libssl.so.3 from ${openssl_libdir}."
+  grep -F "libcrypto.so.3 => ${openssl_libdir}/" <<<"$ldd_text" >/dev/null || \
+    die "PHP is not loading private libcrypto.so.3 from ${openssl_libdir}."
 
   grep -F "libcurl.so.4 => ${curl_libdir}/" <<<"$ldd_text" >/dev/null || \
     die "PHP is not loading the private libcurl from ${curl_libdir}."
-  if grep -Eq 'lib(ssl|crypto)\.so\.3([[:space:]]|$)' <<<"$ldd_text"; then
+  if grep -Eq 'lib(ssl|crypto)\.so\.1\.1([[:space:]]|$)' <<<"$ldd_text"; then
     printf '%s\n' "$ldd_text" | grep -E 'lib(curl|ssl|crypto)\.so' >&2 || true
-    die "OpenSSL 3 is still loaded; refusing an unsafe mixed-ABI PHP build."
+    die "OpenSSL 1.1 is also loaded; refusing a mixed-ABI PHP build."
   fi
 
   # This catches the exact mixed-OpenSSL regression that previously caused
@@ -569,6 +608,13 @@ verify() {
       134|139) die "HTTPS curl smoke test crashed (exit ${smoke_rc})." ;;
       *) warn "HTTPS curl smoke test could not complete (exit ${smoke_rc}); build linkage is otherwise valid." ;;
     esac
+  fi
+
+  if [ -f "${PREFIX}/etc/php-fpm.conf" ]; then
+    log "testing FPM configuration"
+    "$fpm_bin" -t
+  else
+    warn "FPM binary built, but no active php-fpm.conf was produced."
   fi
 
   log "installed: $("$php_bin" -n -v | sed -n '1p')"
@@ -603,6 +649,7 @@ main() {
   need_command make
 
   build_openssl
+  provision_openssl_runtime_files
   build_curl
   build_libmcrypt
   fetch_php_source
