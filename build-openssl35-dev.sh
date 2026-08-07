@@ -2,8 +2,8 @@
 # Experimental PHP 5.3.29 + OpenSSL 3.5 LTS build.
 #
 # This wrapper deliberately leaves the production PHP 5.3 / OpenSSL 1.1 path
-# untouched. It reuses build-php53.sh in a disposable build tree and applies
-# only temporary OpenSSL 3.5 compatibility edits there.
+# untouched. It reuses build-php53.sh in a disposable build tree while the
+# OpenSSL 3.5 PHP compatibility changes live in the tracked PHP source itself.
 #
 # PHP:     /opt/ngm/php/5.3-openssl35-dev
 # OpenSSL: /opt/ngm/php/openssl-3.5 (through a build-only prefix view)
@@ -66,8 +66,8 @@ mkdir -p "$BUILD_ROOT"
 cp "$BASE_BUILD" "$GENERATED_BUILD"
 chmod +x "$GENERATED_BUILD"
 
-# Transform only the disposable build driver. The checked-out php53 source and
-# normal build-php53.sh remain unchanged until the OpenSSL 3.5 port is proven.
+# Transform only disposable build-driver settings. PHP C-source compatibility
+# fixes are tracked directly in this repository and are never rewritten here.
 python3 - "$GENERATED_BUILD" <<'PY'
 from pathlib import Path
 import sys
@@ -95,41 +95,6 @@ new_guard = '''  if grep -Eq 'lib(ssl|crypto)\\.so\\.1\\.1([[:space:]]|$)' <<<"$
     die "OpenSSL 1.1 is also loaded; refusing a mixed-ABI PHP build."
   fi'''
 once(old_guard, new_guard, 'mixed OpenSSL ABI guard')
-
-marker = 'source_has_generated_files() {'
-patch_func = r'''patch_openssl35_source() {
-  log "applying temporary OpenSSL 3.5 source compatibility patch"
-  python3 - "${SRC_DIR}/ext/openssl/openssl.c" <<'PY_OPENSSL35'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-
-old = '\tREGISTER_LONG_CONSTANT("OPENSSL_SSLV23_PADDING", RSA_SSLV23_PADDING, CONST_CS|CONST_PERSISTENT);'
-new = '#ifdef RSA_SSLV23_PADDING\n' + old + '\n#endif'
-if new not in text:
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit("expected one OPENSSL_SSLV23_PADDING registration, found %d" % count)
-    text = text.replace(old, new, 1)
-
-old_oid = '''\t\tif (OBJ_create(cnf->value, cnf->name, cnf->name) == NID_undef) {'''
-new_oid = '''\t\tif (OBJ_sn2nid(cnf->name) == NID_undef && OBJ_ln2nid(cnf->name) == NID_undef &&
-\t\t\t\tOBJ_create(cnf->value, cnf->name, cnf->name) == NID_undef) {'''
-if new_oid not in text:
-    count = text.count(old_oid)
-    if count != 1:
-        raise SystemExit("expected one add_oid_section OBJ_create call, found %d" % count)
-    text = text.replace(old_oid, new_oid, 1)
-
-path.write_text(text, encoding="utf-8")
-PY_OPENSSL35
-}
-
-'''
-once(marker, patch_func + marker, 'source patch function insertion')
-once('  fetch_php_source\n', '  fetch_php_source\n  patch_openssl35_source\n', 'source patch invocation')
 
 # PHP 5.3 make install can leave only the FPM template. Promote it in this
 # disposable install so the runtime probe can validate php-fpm -t.
