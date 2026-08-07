@@ -105,6 +105,7 @@ import sys
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
+
 old = '\tREGISTER_LONG_CONSTANT("OPENSSL_SSLV23_PADDING", RSA_SSLV23_PADDING, CONST_CS|CONST_PERSISTENT);'
 new = '#ifdef RSA_SSLV23_PADDING\n' + old + '\n#endif'
 if new not in text:
@@ -112,7 +113,17 @@ if new not in text:
     if count != 1:
         raise SystemExit("expected one OPENSSL_SSLV23_PADDING registration, found %d" % count)
     text = text.replace(old, new, 1)
-    path.write_text(text, encoding="utf-8")
+
+old_oid = '''\t\tif (OBJ_create(cnf->value, cnf->name, cnf->name) == NID_undef) {'''
+new_oid = '''\t\tif (OBJ_sn2nid(cnf->name) == NID_undef && OBJ_ln2nid(cnf->name) == NID_undef &&
+\t\t\t\tOBJ_create(cnf->value, cnf->name, cnf->name) == NID_undef) {'''
+if new_oid not in text:
+    count = text.count(old_oid)
+    if count != 1:
+        raise SystemExit("expected one add_oid_section OBJ_create call, found %d" % count)
+    text = text.replace(old_oid, new_oid, 1)
+
+path.write_text(text, encoding="utf-8")
 PY_OPENSSL35
 }
 
