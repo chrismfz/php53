@@ -1,0 +1,15 @@
+# patches-local/exclude — CloudLinux series entries we deliberately DO NOT apply.
+#
+# One `series` filename per line (# comments allowed). This file is HAND-maintained
+# and the importer never touches it, so an adaptation survives a patch refresh.
+# The build (build-php53.sh) skips these when applying patches/series, and applies
+# any patches-local/*.patch afterwards as our own adaptations.
+#
+# Each entry MUST say why, so a future refresh can re-check it.
+
+# Already fixed in our OpenSSL 3.x rewrite of ext/openssl/openssl.c: openssl_seal()
+# checks EVP_SealInit()'s return (`if (!EVP_SealInit(...) || ...)`) and bails, which
+# is the substance of the CVE (pristine 5.3.29 ignored the return -> NULL-deref DoS).
+# The CloudLinux patch targets the pristine code and cannot apply to the 3.x context;
+# excluding it loses no security coverage.
+php-5.3.29-CVE-2017-11144.patch
