@@ -849,10 +849,25 @@ apply_patches() {
       warn "unexpected patch rejects:"; printf '%s\n' "$bad" >&2
       die "refusing to build with half-applied security patches (resolve via patches-local/)"
     fi
-    # Force re2c to regenerate these from the patched .re (their .c hunks rejected).
-    rm -f ext/date/lib/parse_date.c ext/standard/var_unserializer.c
+
+    # The generated .c hunks for these two files reject on purpose: their .re is
+    # the source of truth and applies cleanly, but PHP 5.3 ships the .c pre-built
+    # (re2c 0.13.5) with NO make rule to rebuild parse_date.c — so patching the
+    # stale .c is both futile and version-fragile. Regenerate both from the patched
+    # .re with the flags the pristine files carry (parse_date: -d -b; the
+    # var_unserializer Makefile.frag uses -b), discarding the half-applied .c.
+    local re2c="${TOOLCHAIN}/bin/re2c"
+    [ -x "$re2c" ] || die "re2c missing at ${re2c} — toolchain must be built before apply_patches"
+    log "  regenerating ext/date/lib/parse_date.c from patched .re (re2c -d -b)"
+    "$re2c" -d -b -o ext/date/lib/parse_date.c ext/date/lib/parse_date.re
+    log "  regenerating ext/standard/var_unserializer.c from patched .re (re2c -b)"
+    "$re2c" -b -o ext/standard/var_unserializer.c ext/standard/var_unserializer.re
+    local g
+    for g in ext/date/lib/parse_date.c ext/standard/var_unserializer.c; do
+      [ -s "$g" ] || die "re2c produced an empty ${g}"
+    done
     find . -name '*.rej' -delete 2>/dev/null || true
-    log "security series applied (${applied} patches, ${skipped} excluded)"
+    log "security series applied (${applied} patches, ${skipped} excluded; 2 generated files rebuilt)"
   popd >/dev/null
 }
 
@@ -887,7 +902,6 @@ main() {
   ensure_configure_lib_alias "$CURL_PREFIX" 'libcurl.so.4*'
   ensure_configure_lib_alias "$MCRYPT_PREFIX" 'libmcrypt.so*'
   fetch_php_source
-  apply_patches
 
   if source_has_generated_files; then
     log "source contains all generated files; private generator toolchain is not required"
@@ -896,6 +910,7 @@ main() {
     build_toolchain
   fi
 
+  apply_patches   # after the toolchain: needs re2c to regenerate parse_date.c/var_unserializer.c
   build_php
   install_runtime_extensions
   verify
