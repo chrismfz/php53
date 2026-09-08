@@ -41,6 +41,7 @@ php-5.3.29-CVE-2015-4603.patch -p1
 php-5.3.29-CVE-2015-3411-3412.patch -p1
 php-5.3.29-CVE-2015-3152.patch -p1
 php-5.3.29-CVE-2015-4598.patch -p1
+p_option.patch -p1
 php-5.3.29-CVE-2015-6831.patch -p1
 php-5.3.29-CVE-2015-6832.patch -p1
 php-5.3.29-CVE-2015-6833.patch -p1

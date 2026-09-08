@@ -79,7 +79,7 @@ order	patch_no	decision	category	sha256	filename	reason
 78	740	keep	CVE	6607cabff03f13a64fca23117a26ce7fe497243ea3095ee43f6edd548ccd3334	php-5.3.29-CVE-2015-3411-3412.patch	
 79	741	keep	CVE	f75f45c5bbf86fc0beeb8cea9595886c5c52adf9cee557d5cfa16cd83513bc55	php-5.3.29-CVE-2015-3152.patch	
 80	736	keep	CVE	9de448595bc41ea535a0a43c708a4aa6d82dce7fb8f60ec50138cd6f24f39704	php-5.3.29-CVE-2015-4598.patch	
-81	742	skip	build/packaging	15bfe7607b45ffa929dc1d139f2fe3f56a9dba247add36cbfb5025a442d0d628	p_option.patch	build/packaging glue, not a source security/bug backport
+81	742	keep	forced	15bfe7607b45ffa929dc1d139f2fe3f56a9dba247add36cbfb5025a442d0d628	p_option.patch	force-kept via patches-local/include
 82	744	keep	CVE	790ff0e8a36d24a91695d490773a26bb409aa2cfa68f8eadbf9c0319d846520f	php-5.3.29-CVE-2015-6831.patch	
 83	745	keep	CVE	45b6646f3a9e340678d17806c79fa185eeeddaf8d4c2339db4aa7c622a5a9f6c	php-5.3.29-CVE-2015-6832.patch	
 84	746	keep	CVE	ef61df6bf58c4685863f90249fd55382af0bc37f63d3f44aa1c7d4e1ae9aee3d	php-5.3.29-CVE-2015-6833.patch	

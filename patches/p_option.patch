@@ -1,0 +1,51 @@
+diff -apruN php-5.3.29.orig/Zend/zend_API.c php-5.3.29/Zend/zend_API.c
+--- php-5.3.29.orig/Zend/zend_API.c	2014-08-13 15:22:50.000000000 -0400
++++ php-5.3.29/Zend/zend_API.c	2015-07-27 15:50:25.192361587 -0400
+@@ -397,6 +397,7 @@ static char *zend_parse_arg_impl(int arg
+ 			}
+ 			break;
+ 
++		case 'p':
+ 		case 's':
+ 			{
+ 				char **p = va_arg(*va, char **);
+@@ -423,13 +424,16 @@ static char *zend_parse_arg_impl(int arg
+ 						}
+ 						*p = Z_STRVAL_PP(arg);
+ 						*pl = Z_STRLEN_PP(arg);
++						if (c == 'p' && CHECK_ZVAL_NULL_PATH(*arg)) {
++							return "valid path";
++						}
+ 						break;
+ 
+ 					case IS_OBJECT:
+ 					case IS_ARRAY:
+ 					case IS_RESOURCE:
+ 					default:
+-						return "string";
++						return c == 's' ? "string" : "valid path";
+ 				}
+ 			}
+ 			break;
+@@ -697,7 +708,7 @@ static int zend_parse_va_args(int num_ar
+ 				}
+ 				/* break missing intentionally */
+ 			case 'l': case 'd':
+-			case 'H': case 'b':
++			case 'H': case 'b': case 'p':
+ 			case 'r': case 'a':
+ 			case 'o': case 'O':
+ 			case 'z': case 'Z':
+diff -apruN php-5.3.29.orig/Zend/zend_API.h php-5.3.29/Zend/zend_API.h
+--- php-5.3.29.orig/Zend/zend_API.h	2014-08-13 15:22:50.000000000 -0400
++++ php-5.3.29/Zend/zend_API.h	2015-07-27 15:51:11.211210346 -0400
+@@ -517,6 +517,9 @@ END_EXTERN_C()
+ #define CHECK_ZVAL_STRING_REL(z)
+ #endif
+ 
++#define CHECK_ZVAL_NULL_PATH(p) (Z_STRLEN_P(p) != strlen(Z_STRVAL_P(p)))
++#define CHECK_NULL_PATH(p, l) (strlen(p) != l)
++
+ #define ZVAL_RESOURCE(z, l) {		\
+ 		Z_TYPE_P(z) = IS_RESOURCE;	\
+ 		Z_LVAL_P(z) = l;			\

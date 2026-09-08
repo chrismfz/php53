@@ -120,7 +120,16 @@ def main():
     ap.add_argument("--out", default="patches", help="output directory (default: patches)")
     ap.add_argument("--source-url", default=DEFAULT_SOURCE_URL,
                     help="base URL the SRPM is published at (recorded for provenance)")
+    ap.add_argument("--include-list", default="patches-local/include",
+                    help="file of patch basenames to force-keep despite classification")
     args = ap.parse_args()
+
+    include = set()
+    if os.path.exists(args.include_list):
+        for ln in open(args.include_list, encoding="utf-8", errors="replace"):
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                include.add(ln)
 
     tmp = tempfile.mkdtemp(prefix="clsrpm.")
     try:
@@ -150,6 +159,8 @@ def main():
                 continue
             src = os.path.join(payload, fn)
             cat, keep, reason = classify(fn)
+            if fn in include:
+                cat, keep, reason = "forced", True, "force-kept via patches-local/include"
             sh = sha256(src) if os.path.exists(src) else ""
             if keep and not os.path.exists(src):
                 keep, reason = False, "declared+applied but file absent in SRPM"
