@@ -1,0 +1,30 @@
+diff -apruN php-5.3.29.orig/ext/gd/libgd/gd.c php-5.3.29/ext/gd/libgd/gd.c
+--- php-5.3.29.orig/ext/gd/libgd/gd.c	2016-11-13 08:26:33.234222268 -0500
++++ php-5.3.29/ext/gd/libgd/gd.c	2016-11-13 08:26:35.001446873 -0500
+@@ -1715,7 +1715,7 @@ void gdImageFillToBorder (gdImagePtr im,
+ 	int leftLimit = -1, rightLimit;
+ 	int i, restoreAlphaBlending = 0;
+ 
+-	if (border < 0) {
++	if (border < 0 || color < 0) {
+ 		/* Refuse to fill to a non-solid border */
+ 		return;
+ 	}
+diff -apruN php-5.3.29.orig/ext/gd/tests/bug72696.phpt php-5.3.29/ext/gd/tests/bug72696.phpt
+--- php-5.3.29.orig/ext/gd/tests/bug72696.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/gd/tests/bug72696.phpt	2016-11-13 08:26:35.002447000 -0500
+@@ -0,0 +1,14 @@
++--TEST--
++Bug #72696 (imagefilltoborder stackoverflow on truecolor images)
++--SKIPIF--
++<?php
++if (!extension_loaded('gd')) die('skip gd extension not available');
++?>
++--FILE--
++<?php
++$im = imagecreatetruecolor(10, 10);
++imagefilltoborder($im, 0, 0, 1, -2);
++?>
++===DONE===
++--EXPECT--
++===DONE===

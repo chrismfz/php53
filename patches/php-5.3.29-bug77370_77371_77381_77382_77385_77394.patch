@@ -1,0 +1,115 @@
+commit 12583615da266b59f3cd28e9f81d6898645e30f8
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Tue Jan 8 14:16:55 2019 +0100
+
+    Cumulative fix for bugs #77370, #77371, #77381, #77382, #77385 and #77394
+
+diff --git a/ext/mbstring/oniguruma/src/regcomp.c b/ext/mbstring/oniguruma/src/regcomp.c
+index 83b9252..3ea2841 100644
+--- a/ext/mbstring/oniguruma/regcomp.c
++++ b/ext/mbstring/oniguruma/regcomp.c
+@@ -540,13 +540,13 @@ compile_length_string_node(Node* node, regex_t* reg)
+   ambig = NODE_STRING_IS_AMBIG(node);
+ 
+   p = prev = sn->s;
+-  prev_len = enc_len(enc, p);
++  SAFE_ENC_LEN(enc, p, sn->end, prev_len);
+   p += prev_len;
+   slen = 1;
+   rlen = 0;
+ 
+   for (; p < sn->end; ) {
+-    len = enc_len(enc, p);
++    SAFE_ENC_LEN(enc, p, sn->end, len);
+     if (len == prev_len) {
+       slen++;
+     }
+@@ -591,12 +591,12 @@ compile_string_node(Node* node, regex_t* reg)
+   ambig = NODE_STRING_IS_AMBIG(node);
+ 
+   p = prev = sn->s;
+-  prev_len = enc_len(enc, p);
++  SAFE_ENC_LEN(enc, p, end, prev_len);
+   p += prev_len;
+   slen = 1;
+ 
+   for (; p < end; ) {
+-    len = enc_len(enc, p);
++    SAFE_ENC_LEN(enc, p, end, len);
+     if (len == prev_len) {
+       slen++;
+     }
+diff --git a/ext/mbstring/oniguruma/src/regparse.c b/ext/mbstring/oniguruma/src/regparse.c
+index fcc05cf..ac5774b 100644
+--- a/ext/mbstring/oniguruma/regparse.c
++++ b/ext/mbstring/oniguruma/regparse.c
+@@ -3575,7 +3575,9 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
+ 	tok->u.code = (OnigCodePoint )num;
+       }
+       else { /* string */
+-	p = tok->backp + enc_len(enc, tok->backp);
++        int len;
++        SAFE_ENC_LEN(enc, tok->backp, end, len);
++        p = tok->backp + len;
+       }
+       break;
+     }
+diff --git a/ext/mbstring/oniguruma/src/regparse.h b/ext/mbstring/oniguruma/src/regparse.h
+index ff24eeb..2855616 100644
+--- a/ext/mbstring/oniguruma/regparse.h
++++ b/ext/mbstring/oniguruma/regparse.h
+@@ -455,4 +455,16 @@ extern int onig_global_callout_names_free(void);
+ extern int onig_print_names(FILE*, regex_t*);
+ #endif
+ 
++#if (defined (__GNUC__) && __GNUC__ > 2 ) && !defined(DARWIN) && !defined(__hpux) && !defined(_AIX)
++# define UNEXPECTED(condition) __builtin_expect(condition, 0)
++#else
++# define UNEXPECTED(condition) (condition)
++#endif
++
++#define SAFE_ENC_LEN(enc, p, end, res) do {  \
++    int __res = enc_len(enc, p);              \
++    if (UNEXPECTED(p + __res > end)) __res = end - p;    \
++	res = __res;                             \
++} while(0);
++
+ #endif /* REGPARSE_H */
+diff --git a/ext/mbstring/tests/bug77371.phpt b/ext/mbstring/tests/bug77371.phpt
+new file mode 100644
+index 0000000..2ab04c0
+--- /dev/null
++++ b/ext/mbstring/tests/bug77371.phpt
+@@ -0,0 +1,10 @@
++--TEST--
++Bug #77371 (heap buffer overflow in mb regex functions - compile_string_node)
++--SKIPIF--
++<?php extension_loaded('mbstring') or die('skip mbstring not available'); ?>
++--FILE--
++<?php
++var_dump(mb_ereg("()0\xfc00000\xfc00000\xfc00000\xfc",""));
++?>
++--EXPECTF--
++bool(false)
+diff --git a/ext/mbstring/tests/bug77381.phpt b/ext/mbstring/tests/bug77381.phpt
+new file mode 100644
+index 0000000..3d6dd76
+--- /dev/null
++++ b/ext/mbstring/tests/bug77381.phpt
+@@ -0,0 +1,16 @@
++--TEST--
++Bug #77381 (heap buffer overflow in multibyte match_at)
++--SKIPIF--
++<?php extension_loaded('mbstring') or die('skip mbstring not available'); ?>
++--FILE--
++<?php
++var_dump(mb_ereg("000||0\xfa","0"));
++var_dump(mb_ereg("(?i)000000000000000000000\xf0",""));
++var_dump(mb_ereg("0000\\"."\xf5","0"));
++var_dump(mb_ereg("(?i)FFF00000000000000000\xfd",""));
++?>
++--EXPECTF--
++int(1)
++bool(false)
++bool(false)
++bool(false)

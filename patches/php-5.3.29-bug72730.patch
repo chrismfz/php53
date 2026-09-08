@@ -1,0 +1,35 @@
+diff -apruN php-5.3.29.orig/ext/gd/gd.c php-5.3.29/ext/gd/gd.c
+--- php-5.3.29.orig/ext/gd/gd.c	2016-08-25 00:39:10.000000000 -0400
++++ php-5.3.29/ext/gd/gd.c	2016-08-25 00:41:00.684665206 -0400
+@@ -3136,6 +3136,11 @@ PHP_FUNCTION(imagegammacorrect)
+ 		return;
+ 	}
+ 
++	if ( input <= 0.0 || output <= 0.0 ) {
++		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Gamma values should be positive");
++		RETURN_FALSE;
++	}
++
+ 	ZEND_FETCH_RESOURCE(im, gdImagePtr, &IM, -1, "Image", le_gd);
+ 
+ 	if (gdImageTrueColor(im))	{
+diff -apruN php-5.3.29.orig/ext/gd/tests/bug72730.phpt php-5.3.29/ext/gd/tests/bug72730.phpt
+--- php-5.3.29.orig/ext/gd/tests/bug72730.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/gd/tests/bug72730.phpt	2016-08-25 00:41:00.685665333 -0400
+@@ -0,0 +1,15 @@
++--TEST--
++Bug #72730: imagegammacorrect allows arbitrary write access
++--SKIPIF--
++<?php 
++if (!function_exists("imagecreatetruecolor")) die("skip");
++?>
++--FILE--
++<?php
++$img =  imagecreatetruecolor(1, 1);
++imagegammacorrect($img, -1, 1337);
++?>
++DONE
++--EXPECTF--
++Warning: imagegammacorrect(): Gamma values should be positive in %sbug72730.php on line %d
++DONE
+\ No newline at end of file

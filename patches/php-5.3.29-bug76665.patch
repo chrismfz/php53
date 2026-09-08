@@ -1,0 +1,47 @@
+commit ed7e3bc70a89a0838a5b7e44928cbd65aec50bb1
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Thu Jul 26 13:15:19 2018 +0200
+
+    Fix #76665: SQLite3Stmt::bindValue() with SQLITE3_FLOAT doesn't juggle
+    
+    We need to ensure that a zval IS_DOUBLE before we access it as such.
+    In this case we apply common type juggling to do so.
+
+diff --git a/ext/sqlite3/sqlite3.c b/ext/sqlite3/sqlite3.c
+index 40406ee..6894089 100644
+--- a/ext/sqlite3/sqlite3.c
++++ b/ext/sqlite3/sqlite3.c
+@@ -1562,7 +1562,7 @@ PHP_METHOD(sqlite3stmt, execute)
+ 					break;
+ 
+ 				case SQLITE_FLOAT:
+-					/* convert_to_double(param->parameter);*/
++					convert_to_double(param->parameter);
+ 					sqlite3_bind_double(stmt_obj->stmt, param->param_number, Z_DVAL_P(param->parameter));
+ 					break;
+ 
+diff --git a/ext/sqlite3/tests/bug76665.phpt b/ext/sqlite3/tests/bug76665.phpt
+new file mode 100644
+index 0000000..0e1de13
+--- /dev/null
++++ b/ext/sqlite3/tests/bug76665.phpt
+@@ -0,0 +1,19 @@
++--TEST--
++Bug #76665 (SQLite3Stmt::bindValue() with SQLITE3_FLOAT doesn't juggle)
++--SKIPIF--
++<?php
++if (!extension_loaded('sqlite3')) die('skip sqlite3 extension not available');
++?>
++--FILE--
++<?php
++$db = new SQLite3(':memory:');
++$db->exec("CREATE TABLE foo (bar REAL)");
++$stmt = $db->prepare("INSERT INTO foo VALUES (:bar)");
++$stmt->bindValue(':bar', 17, SQLITE3_FLOAT);
++$stmt->execute();
++var_dump($db->querySingle("SELECT bar FROM foo LIMIT 1"));
++?>
++===DONE===
++--EXPECT--
++float(17)
++===DONE===

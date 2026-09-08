@@ -1,0 +1,27 @@
+commit fa65f5ecf5d0539f15a3048bf8c073f4c262baf1
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Thu Jun 27 11:34:51 2019 +0200
+
+    Fix #78212: Segfault in built-in webserver
+    
+    Since syslog's ident and facility parameters have been added to
+    config[1], vsyslog() segfaults on Windows, if openlog() has not been
+    called before.  We bring back the removed lines to fix this.
+    
+    [1] <http://git.php.net/?p=php-src.git;a=commit;h=2475337bd8a0fad0dac03db3f5e7e9d331d53653>
+
+diff --git a/win32/wsyslog.c b/win32/wsyslog.c
+index 695c7db8cd..9050b40381 100644
+--- a/win32/wsyslog.c
++++ b/win32/wsyslog.c
+@@ -95,6 +95,10 @@ void vsyslog(int priority, const char *message, va_list args)
+ 	DWORD evid;
+ 	wchar_t *strsw[2];
+ 
++	/* default event source */
++	if (INVALID_HANDLE_VALUE == PW32G(log_source))
++		openlog("php", LOG_PID, LOG_SYSLOG);
++
+ 	switch (priority) {			/* translate UNIX type into NT type */
+ 		case LOG_ALERT:
+ 			etype = EVENTLOG_ERROR_TYPE;

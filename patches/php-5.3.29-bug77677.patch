@@ -1,0 +1,16 @@
+diff -apruN a/sapi/fpm/fpm/fpm_children.c b/sapi/fpm/fpm/fpm_children.c
+--- a/sapi/fpm/fpm/fpm_children.c	2019-01-09 11:54:13.000000000 +0200
++++ b/sapi/fpm/fpm/fpm_children.c	2019-12-03 15:45:15.195387186 +0200
+@@ -204,7 +204,11 @@ void fpm_children_bury() /* {{{ */
+ 
+ 		} else if (WIFSIGNALED(status)) {
+ 			const char *signame = fpm_signal_names[WTERMSIG(status)];
+-			const char *have_core = WCOREDUMP(status) ? " - core dumped" : "";
++#ifdef WCOREDUMP
++                        const char *have_core = WCOREDUMP(status) ? " - core dumped" : "";
++#else
++                        const char* have_core = "";
++#endif
+ 
+ 			if (signame == NULL) {
+ 				signame = "";

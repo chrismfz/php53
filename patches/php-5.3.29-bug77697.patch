@@ -1,0 +1,38 @@
+commit b41959089313d7397c936a885e9d1ca84e0f93f8
+Author: Xinchen Hui <laruence@gmail.com>
+Date:   Fri Mar 15 16:58:08 2019 +0800
+
+    Fixed bug #77697 (Crash on Big_Endian platform)
+
+diff --git a/ext/phar/util.c b/ext/phar/util.c
+index 7721a4e37c..d05f8ca5cd 100644
+--- a/ext/phar/util.c
++++ b/ext/phar/util.c
+@@ -1829,9 +1829,9 @@ int phar_create_signature(phar_archive_data *phar, php_stream *fp, char **signat
+ 			return FAILURE;
+ #endif
+ 		case PHAR_SIG_OPENSSL: {
+-			int siglen;
+ 			unsigned char *sigbuf;
+ #ifdef PHAR_HAVE_OPENSSL
++			unsigned int siglen;
+ 			BIO *in;
+ 			EVP_PKEY *key;
+ 			EVP_MD_CTX *md_ctx;
+@@ -1878,7 +1878,7 @@ int phar_create_signature(phar_archive_data *phar, php_stream *fp, char **signat
+ 				}
+ 			}
+ 
+-			if (!EVP_SignFinal (md_ctx, sigbuf,(unsigned int *)&siglen, key)) {
++			if (!EVP_SignFinal (md_ctx, sigbuf, &siglen, key)) {
+ 				efree(sigbuf);
+ 				if (error) {
+ 					spprintf(error, 0, "unable to write phar \"%s\" with requested openssl signature", phar->fname);
+@@ -1889,6 +1889,7 @@ int phar_create_signature(phar_archive_data *phar, php_stream *fp, char **signat
+ 			sigbuf[siglen] = '\0';
+ 			EVP_MD_CTX_destroy(md_ctx);
+ #else
++			size_t siglen;
+ 			sigbuf = NULL;
+ 			siglen = 0;
+ 			php_stream_seek(fp, 0, SEEK_END);

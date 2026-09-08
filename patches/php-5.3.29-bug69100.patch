@@ -1,0 +1,64 @@
+commit b864abfe23fde5d79a303519674ba83062f89361
+Author: Nikita Popov <nikita.ppv@gmail.com>
+Date:   Wed Jul 17 15:58:29 2019 +0200
+
+    Fixed bug #69100
+
+diff --git a/ext/standard/tests/file/bug69100.phpt b/ext/standard/tests/file/bug69100.phpt
+new file mode 100644
+index 0000000000..b243bfc3a0
+--- /dev/null
++++ b/ext/standard/tests/file/bug69100.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Bug #69100: Bus error from stream_copy_to_stream (file -> SSL stream) with invalid length
++--FILE--
++<?php
++
++$fileIn = __DIR__ . '/bug69100_in.txt';
++$fileOut = __DIR__ . '/bug69100_out.txt';
++
++file_put_contents($fileIn, str_repeat('A', 64 * 1024));
++$fr = fopen($fileIn, 'rb');
++$fw = fopen($fileOut, 'w');
++
++var_dump(stream_copy_to_stream($fr, $fw, 32 * 1024));
++var_dump(stream_copy_to_stream($fr, $fw, 64 * 1024));
++
++fclose($fr);
++fclose($fw);
++unlink($fileIn);
++unlink($fileOut);
++
++?>
++--EXPECT--
++int(32768)
++int(32768)
+diff --git a/main/streams/plain_wrapper.c b/main/streams/plain_wrapper.c
+index 847944a..2d74a44 100644
+--- a/main/streams/plain_wrapper.c
++++ b/main/streams/plain_wrapper.c
+@@ -659,16 +659,15 @@ static int php_stdiop_set_option(php_stream *stream, int option, int value, void
+ 						return fd == -1 ? PHP_STREAM_OPTION_RETURN_ERR : PHP_STREAM_OPTION_RETURN_OK;
+ 
+ 					case PHP_STREAM_MMAP_MAP_RANGE:
+-						do_fstat(data, 1);
+-						if (range->length == 0 && range->offset > 0 && range->offset < data->sb.st_size) {
+-							range->length = data->sb.st_size - range->offset;
+-						}
+-						if (range->length == 0 || range->length > data->sb.st_size) {
+-							range->length = data->sb.st_size;
++						if (do_fstat(data, 1) != 0) {
++							return PHP_STREAM_OPTION_RETURN_ERR;
+ 						}
+-						if (range->offset >= data->sb.st_size) {
++						if (range->offset > data->sb.st_size) {
+ 							range->offset = data->sb.st_size;
+-							range->length = 0;
++						}
++						if (range->length == 0 ||
++								range->length > data->sb.st_size - range->offset) {
++							range->length = data->sb.st_size - range->offset;
+ 						}
+ 						switch (range->mode) {
+ 							case PHP_STREAM_MAP_MODE_READONLY:

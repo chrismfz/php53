@@ -1,0 +1,128 @@
+commit e691a98c1fa332e35088cb01cbb8f4f8ee4b3711
+Author: fancyweb <calvet.thomas@gmail.com>
+Date:   Tue Jul 30 00:33:13 2019 +0200
+
+    Fix #76342: file_get_contents waits twice specified timeout
+
+diff --git a/ext/standard/http_fopen_wrapper.c b/ext/standard/http_fopen_wrapper.c
+index b80f982..be23679 100644
+--- a/ext/standard/http_fopen_wrapper.c
++++ b/ext/standard/http_fopen_wrapper.c
+@@ -726,6 +726,11 @@ finish:
+ 			MAKE_STD_ZVAL(http_response);
+ 			ZVAL_STRINGL(http_response, tmp_line, tmp_line_len, 1);
+ 			zend_hash_next_index_insert(Z_ARRVAL_P(response_header), &http_response, sizeof(zval *), NULL);
++		} else {
++			php_stream_close(stream);
++			stream = NULL;
++			php_stream_wrapper_log_error(wrapper, options, "HTTP request failed!");
++			goto out;
+ 		}
+ 	} else {
+ 		php_stream_wrapper_log_error(wrapper, options, "HTTP request failed, unexpected end of socket!");
+diff --git a/ext/standard/tests/http/bug76342.phpt b/ext/standard/tests/http/bug76342.phpt
+new file mode 100644
+index 0000000..1791270
+--- /dev/null
++++ b/ext/standard/tests/http/bug76342.phpt
+@@ -0,0 +1,33 @@
++--TEST--
++Bug #76342 (file_get_contents waits twice specified timeout)
++--INI--
++allow_url_fopen=1
++--SKIPIF--
++<?php require 'server.inc'; http_server_skipif('tcp://127.0.0.1:12342'); ?>
++--FILE--
++<?php
++require 'server.inc';
++
++$options = array(
++  'http' => array(
++    'timeout' => '0.1',
++  ),
++);
++
++$ctx = stream_context_create($options);
++
++$pid = http_server_sleep('tcp://127.0.0.1:12342');
++
++$start = microtime(true);
++file_get_contents('http://127.0.0.1:12342/', false, $ctx);
++if (microtime(true) - $start >= 0.2) {
++    echo 'FAIL';
++}
++
++http_server_kill($pid);
++
++?>
++DONE
++--EXPECTF--
++Warning: file_get_contents(http://127.0.0.1:12342/): failed to open stream: HTTP request failed! in %s on line %d
++DONE
+diff --git a/ext/standard/tests/http/server.inc b/ext/standard/tests/http/server.inc
+index db66c3d..e580674 100644
+--- a/ext/standard/tests/http/server.inc
++++ b/ext/standard/tests/http/server.inc
+@@ -7,14 +7,7 @@ function http_server_skipif($socket_string) {
+ 	if (!stream_socket_server($socket_string)) die('skip stream_socket_server() failed');
+ }
+ 
+-/* Minimal HTTP server with predefined responses.
+- *
+- * $socket_string is the socket to create and listen on (e.g. tcp://127.0.0.1:1234)
+- * $files is an array of files containing N responses for N expected requests. Server dies after N requests.
+- * $output is a stream on which everything sent by clients is written to
+- */
+-function http_server($socket_string, array $files, &$output = null) {
+-
++function http_server_init($socket_string, &$output = null) {
+ 	pcntl_alarm(60);
+ 
+ 	$server = stream_socket_server($socket_string, $errno, $errstr);
+@@ -36,6 +29,21 @@ function http_server($socket_string, array $files, &$output = null) {
+ 		return $pid;
+ 	}
+ 
++	return $server;
++}
++
++/* Minimal HTTP server with predefined responses.
++ *
++ * $socket_string is the socket to create and listen on (e.g. tcp://127.0.0.1:1234)
++ * $files is an array of files containing N responses for N expected requests. Server dies after N requests.
++ * $output is a stream on which everything sent by clients is written to
++ */
++function http_server($socket_string, array $files, &$output = null) {
++
++	if (!is_resource($server = http_server_init($socket_string, $output))) {
++		return $server;
++	}
++
+ 	foreach($files as $file) {
+ 
+ 		$sock = stream_socket_accept($server);
+@@ -84,6 +92,24 @@ function http_server($socket_string, array $files, &$output = null) {
+ 	exit(0);
+ }
+ 
++function http_server_sleep($socket_string, $micro_seconds = 500000)
++{
++	if (!is_resource($server = http_server_init($socket_string, $output))) {
++		return $server;
++	}
++
++	$sock = stream_socket_accept($server);
++	if (!$sock) {
++		exit(1);
++	}
++
++	usleep($micro_seconds);
++
++	fclose($sock);
++
++	exit(0);
++}
++
+ function http_server_kill($pid) {
+ 	posix_kill($pid, SIGTERM);
+ 	pcntl_waitpid($pid, $status);

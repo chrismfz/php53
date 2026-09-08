@@ -1,0 +1,12 @@
+diff --git a/Zend/zend_hash.c b/Zend/zend_hash.c
+index 360a69a..287874e 100644
+--- a/Zend/zend_hash.c
++++ b/Zend/zend_hash.c
+@@ -795,6 +795,7 @@ ZEND_API void zend_hash_copy(HashTable *target, HashTable *source, copy_ctor_fun
+ 	if (!target->pInternalPointer) {
+ 		target->pInternalPointer = target->pListHead;
+ 	}
++	target->nNextFreeElement = source->nNextFreeElement;
+ }
+ 
+ 

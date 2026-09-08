@@ -1,0 +1,19 @@
+commit dea2989ab8ba87a6180af497b2efaf0527e985c5
+Author: Stanislav Malyshev <stas@php.net>
+Date:   Sun Jul 7 17:01:01 2019 -0700
+
+    Fix bug #78222 (heap-buffer-overflow on exif_scan_thumbnail)
+
+diff --git a/ext/exif/exif.c b/ext/exif/exif.c
+index 605b37923f..cd7975a9f5 100644
+--- a/ext/exif/exif.c
++++ b/ext/exif/exif.c
+@@ -3498,7 +3498,7 @@ static int exif_scan_thumbnail(image_info_type *ImageInfo)
+ 	size_t          length=2, pos=0;
+ 	jpeg_sof_info   sof_info;
+ 
+-	if (!data) {
++	if (!data || ImageInfo->Thumbnail.size < 4) {
+ 		return FALSE; /* nothing to do here */
+ 	}
+ 	if (memcmp(data, "\xFF\xD8\xFF", 3)) {

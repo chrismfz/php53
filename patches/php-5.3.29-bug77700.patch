@@ -1,0 +1,56 @@
+commit 41fb0eaa116da34fa531437d5b87ca73089e4944
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Wed Mar 6 00:27:16 2019 +0100
+
+    Fix #77700: Writing truecolor images as GIF ignores interlace flag
+    
+    We  revert the interlace flag related part of commit ff2822a[1], since
+    contrary to the transparent color, the interlace flag is not retained
+    by `gdImageCreatePaletteFromTrueColor()`.  This also matches upstream
+    libgd.
+    
+    [1] <http://git.php.net/?p=php-src.git;a=commit;h=ff2822a82b740edb8ccf307f080bae188c200fb9>
+
+diff --git a/ext/gd/libgd/gd_gif_out.c b/ext/gd/libgd/gd_gif_out.c
+index 1f2a6b936a..cd4ea1529b 100644
+--- a/ext/gd/libgd/gd_gif_out.c
++++ b/ext/gd/libgd/gd_gif_out.c
+@@ -132,7 +132,7 @@ void gdImageGifCtx(gdImagePtr im, gdIOCtxPtr out)
+ 	BitsPerPixel = colorstobpp(tim->colorsTotal);
+ 	/* All set, let's do it. */
+ 	GIFEncode(
+-		out, tim->sx, tim->sy, tim->interlace, 0, tim->transparent, BitsPerPixel,
++		out, tim->sx, tim->sy, interlace, 0, tim->transparent, BitsPerPixel,
+ 		tim->red, tim->green, tim->blue, tim);
+ 	if (pim) {
+ 		/* Destroy palette based temporary image. */
+diff --git a/ext/gd/tests/bug77700.phpt b/ext/gd/tests/bug77700.phpt
+new file mode 100644
+index 0000000000..07b7ffbbba
+--- /dev/null
++++ b/ext/gd/tests/bug77700.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Bug #77700 (Writing truecolor images as GIF ignores interlace flag)
++--SKIPIF--
++<?php
++if (!extension_loaded('gd')) die('skip gd extension not available');
++?>
++--FILE--
++<?php
++$im = imagecreatetruecolor(10, 10);
++imagefilledrectangle($im, 0, 0, 9, 9, imagecolorallocate($im, 255, 255, 255));
++imageinterlace($im, 1);
++imagegif($im, __DIR__ . 'bug77700.gif');
++
++$im = imagecreatefromgif(__DIR__ . 'bug77700.gif');
++var_dump(imageinterlace($im));
++?>
++===DONE===
++--EXPECT--
++int(1)
++===DONE===
++--CLEAN--
++<?php
++unlink(__DIR__ . 'bug77700.gif');
++?>

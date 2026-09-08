@@ -1,0 +1,15 @@
+diff -apruN php-5.3.29.orig/ext/ereg/ereg.c php-5.3.29/ext/ereg/ereg.c
+--- php-5.3.29.orig/ext/ereg/ereg.c	2014-08-13 15:22:50.000000000 -0400
++++ php-5.3.29/ext/ereg/ereg.c	2016-08-24 17:26:19.168838662 -0400
+@@ -743,6 +743,11 @@ PHPAPI PHP_FUNCTION(sql_regcase)
+ 	
+ 	for (i = j = 0; i < string_len; i++) {
+ 		c = (unsigned char) string[i];
++		if ( j >= INT_MAX - 1 || (isalpha(c) && j >= INT_MAX - 4)) {
++			php_error_docref(NULL TSRMLS_CC, E_WARNING, "String too long, max length is %d", INT_MAX);
++			efree(tmp);
++			RETURN_FALSE;
++		}
+ 		if (isalpha(c)) {
+ 			tmp[j++] = '[';
+ 			tmp[j++] = toupper(c);

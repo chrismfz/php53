@@ -1,0 +1,47 @@
+diff -apruN php-5.3.29.orig/ext/wddx/tests/bug73631.phpt php-5.3.29/ext/wddx/tests/bug73631.phpt
+--- php-5.3.29.orig/ext/wddx/tests/bug73631.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/wddx/tests/bug73631.phpt	2016-12-12 04:48:22.027239529 -0500
+@@ -0,0 +1,18 @@
++--TEST--
++Bug #73631 (Memory leak due to invalid wddx stack processing)
++--SKIPIF--
++<?php if (!extension_loaded("wddx")) print "skip"; ?>
++--FILE--
++<?php
++$xml = <<<EOF
++<?xml version="1.0" ?>
++<wddxPacket version="1.0">
++<number>1234</number>
++<binary><boolean/></binary>
++</wddxPacket>
++EOF;
++$wddx = wddx_deserialize($xml);
++var_dump($wddx);
++?>
++--EXPECTF--
++int(1234)
+diff -apruN php-5.3.29.orig/ext/wddx/wddx.c php-5.3.29/ext/wddx/wddx.c
+--- php-5.3.29.orig/ext/wddx/wddx.c	2016-12-12 04:48:07.767427180 -0500
++++ php-5.3.29/ext/wddx/wddx.c	2016-12-12 04:48:22.029239783 -0500
+@@ -805,6 +805,12 @@ static void php_wddx_push_element(void *
+ 				php_wddx_process_data(user_data, atts[i+1], strlen(atts[i+1]));
+ 				break;
+ 			}
++		} else {
++			ent.type = ST_BOOLEAN;
++			SET_STACK_VARNAME;
++			ALLOC_ZVAL(ent.data);
++			ZVAL_FALSE(ent.data);
++			wddx_stack_push((wddx_stack *)stack, &ent, sizeof(st_entry));
+ 		}
+ 	} else if (!strcmp(name, EL_NULL)) {
+ 		ent.type = ST_NULL;
+@@ -1043,6 +1049,8 @@ static void php_wddx_pop_element(void *u
+ 				} else	{
+ 					zend_hash_next_index_insert(target_hash, &ent1->data, sizeof(zval *), NULL);
+ 				}
++			} else if (!strcmp(name, EL_BINARY) && Z_STRLEN_P(ent1->data) < 1) {
++				zval_ptr_dtor(&ent1->data);
+ 			}
+ 			efree(ent1);
+ 		} else {

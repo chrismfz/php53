@@ -1,0 +1,112 @@
+commit 90d863898cd4d7a1e073916b4730aca33cc29184
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Sat Sep 8 18:27:57 2018 +0200
+
+    Fix #75273: php_zlib_inflate_filter() may not update bytes_consumed
+    
+    Whenever we return with `PSFS_PASS_ON`, we need to update
+    `bytes_consumed` to not mislead the caller.  Instead of fixing the
+    respective `if` clauses, we eschew the early bail-outs to simplify the
+    code a bit.
+
+diff --git a/ext/zlib/tests/bug75273.phpt b/ext/zlib/tests/bug75273.phpt
+new file mode 100644
+index 0000000..66ec81e
+--- /dev/null
++++ b/ext/zlib/tests/bug75273.phpt
+@@ -0,0 +1,58 @@
++--TEST--
++Bug #75273 (php_zlib_inflate_filter() may not update bytes_consumed)
++--SKIPIF--
++<?php
++if (!extension_loaded('zlib')) die('skip zlib extension not available');
++?>
++--FILE--
++<?php
++function non_repeating_str($len = 8192) {
++	$ret = '';
++	mt_srand(1);
++	$iterations = (int) ($len / 256) + 1;
++	for ($i = 0; $i < $iterations; $i++) {
++		$haves = array();
++		$cnt = 0;
++		while ($cnt < 256) {
++			$j = mt_rand(0, 255);
++			if (!isset($haves[$j])) {
++				$haves[$j] = $j;
++				$cnt++;
++				$ret .= chr($j);
++			}
++		}
++	}
++	return substr($ret, 0, $len);
++}
++
++$base_len = 32768 - 23 /*overhead*/;
++
++$stream = fopen('php://memory', 'rb+');
++
++for ($i = 1; $i <= 8; $i++) {
++	$in_data = non_repeating_str($base_len + $i);
++
++	$deflate_filter = stream_filter_append($stream, 'zlib.deflate',  STREAM_FILTER_WRITE, array('window' => 16 + 15));
++	rewind($stream);
++	fwrite($stream, $in_data);
++	stream_filter_remove($deflate_filter);
++
++	rewind($stream);
++	$out_data = stream_get_contents($stream);
++	$out_data_len = strlen($out_data);
++
++	$inflate_filter = stream_filter_prepend($stream, 'zlib.inflate',  STREAM_FILTER_WRITE, array('window' => 16 + 15));
++	rewind($stream);
++	$fwrite_len = fwrite($stream, $out_data);
++	stream_filter_remove($inflate_filter);
++
++	if ($out_data_len !== $fwrite_len) {
++		echo "bug i=$i out_data_len=$out_data_len fwrite_len=$fwrite_len\n";
++	}
++}
++
++fclose($stream);
++?>
++===DONE===
++--EXPECT--
++===DONE===
+diff --git a/ext/zlib/zlib_filter.c b/ext/zlib/zlib_filter.c
+index 8c40834..f3e0d9a 100644
+--- a/ext/zlib/zlib_filter.c
++++ b/ext/zlib/zlib_filter.c
+@@ -78,12 +78,7 @@ static php_stream_filter_status_t php_zlib_inflate_filter(
+ 		size_t bin = 0, desired;
+
+ 		bucket = php_stream_bucket_make_writeable(buckets_in->head TSRMLS_CC);
+-		while (bin < bucket->buflen) {
+-
+-			if (data->finished) {
+-				consumed += bucket->buflen;
+-				break;
+-			}
++		while (bin < (unsigned int) bucket->buflen && !data->finished) {
+ 
+ 			desired = bucket->buflen - bin;
+ 			if (desired > data->inbuf_len) {
+@@ -96,6 +91,7 @@ static php_stream_filter_status_t php_zlib_inflate_filter(
+ 			if (status == Z_STREAM_END) {
+ 				inflateEnd(&(data->strm));
+ 				data->finished = '\1';
++				exit_status = PSFS_PASS_ON;
+ 			} else if (status != Z_OK) {
+ 				/* Something bad happened */
+ 				php_stream_bucket_delref(bucket);
+@@ -118,10 +114,6 @@ static php_stream_filter_status_t php_zlib_inflate_filter(
+ 				data->strm.avail_out = data->outbuf_len;
+ 				data->strm.next_out = data->outbuf;
+ 				exit_status = PSFS_PASS_ON;
+-			} else if (status == Z_STREAM_END && data->strm.avail_out >= data->outbuf_len) {
+-				/* no more data to decompress, and nothing was spat out */
+-				php_stream_bucket_delref(bucket TSRMLS_CC);
+-				return PSFS_PASS_ON;
+ 			}
+ 
+ 		}

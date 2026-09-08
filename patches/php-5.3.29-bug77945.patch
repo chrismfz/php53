@@ -1,0 +1,119 @@
+commit 5da0579259aab958093ca473cb2cc9dff9fd7813
+Author: Nikita Popov <nikita.ppv@gmail.com>
+Date:   Mon Apr 29 13:51:26 2019 +0200
+
+    Fixed bug #77945
+    
+    Make sure that we proper distinguish between empty string key and
+    no key during SDL serialization.
+
+diff --git a/ext/soap/php_sdl.c b/ext/soap/php_sdl.c
+index 2485ef2..d16056e 100644
+--- a/ext/soap/php_sdl.c
++++ b/ext/soap/php_sdl.c
+@@ -1174,7 +1174,7 @@ static sdlPtr load_wsdl(zval *this_ptr, char *struri)
+ 	return ctx.sdl;
+ }
+ 
+-#define WSDL_CACHE_VERSION 0x0e
++#define WSDL_CACHE_VERSION 0x10
+ 
+ #define WSDL_CACHE_GET(ret,type,buf)   memcpy(&ret,*buf,sizeof(type)); *buf += sizeof(type);
+ #define WSDL_CACHE_GET_INT(ret,buf)    ret = ((unsigned char)(*buf)[0])|((unsigned char)(*buf)[1]<<8)|((unsigned char)(*buf)[2]<<16)|((int)(*buf)[3]<<24); *buf += 4;
+@@ -1189,13 +1189,15 @@ static sdlPtr load_wsdl(zval *this_ptr, char *struri)
+ #define WSDL_CACHE_PUT_1(val,buf)      smart_str_appendc(buf,val);
+ #define WSDL_CACHE_PUT_N(val,n,buf)    smart_str_appendl(buf,(char*)val,n);
+ 
++#define WSDL_NO_STRING_MARKER 0x7fffffff
++
+ static char* sdl_deserialize_string(char **in)
+ {
+ 	char *s;
+ 	int len;
+ 
+ 	WSDL_CACHE_GET_INT(len, in);
+-	if (len == 0x7fffffff) {
++	if (len == WSDL_NO_STRING_MARKER) {
+ 		return NULL;
+ 	} else {
+ 		s = emalloc(len+1);
+@@ -1210,7 +1212,7 @@ static void sdl_deserialize_key(HashTable* ht, void* data, char **in)
+ 	int len;
+ 
+ 	WSDL_CACHE_GET_INT(len, in);
+-	if (len == 0) {
++	if (len == WSDL_NO_STRING_MARKER) {
+ 		zend_hash_next_index_insert(ht, &data, sizeof(void*), NULL);
+ 	} else {
+ 		zend_hash_add(ht, *in, len, &data, sizeof(void*), NULL);
+@@ -1778,16 +1780,14 @@ static sdlPtr get_sdl_from_cache(const char *fn, const char *uri, time_t t, time
+ 
+ static void sdl_serialize_string(const char *str, smart_str *out)
+ {
+-	int i;
+-
+ 	if (str) {
+-		i = strlen(str);
++		int i = strlen(str);
+ 		WSDL_CACHE_PUT_INT(i, out);
+ 		if (i > 0) {
+ 			WSDL_CACHE_PUT_N(str, i, out);
+ 		}
+ 	} else {
+-		WSDL_CACHE_PUT_INT(0x7fffffff, out);
++		WSDL_CACHE_PUT_INT(WSDL_NO_STRING_MARKER, out);
+ 	}
+ }
+ 
+@@ -1798,7 +1798,7 @@ static void sdl_serialize_key(zend_string *key, smart_str *out)
+ 		WSDL_CACHE_PUT_INT(ZSTR_LEN(key), out);
+ 		WSDL_CACHE_PUT_N(ZSTR_VAL(key), ZSTR_LEN(key), out);
+ 	} else {
+-		WSDL_CACHE_PUT_INT(0, out);
++		WSDL_CACHE_PUT_INT(WSDL_NO_STRING_MARKER, out);
+ 	}
+ }
+ 
+diff --git a/ext/soap/tests/bugs/bug29236.wsdl b/ext/soap/tests/bugs/bug29236.wsdl
+index d60a487..40e7645 100644
+--- a/ext/soap/tests/bugs/bug29236.wsdl
++++ b/ext/soap/tests/bugs/bug29236.wsdl
+@@ -75,6 +75,7 @@
+           <s:enumeration value="TemporarilySuspended" />
+           <s:enumeration value="PasswordResetRequired" />
+           <s:enumeration value="InvalidID" />
++          <s:enumeration value="" /> <!-- For bug #77945 -->
+         </s:restriction>
+       </s:simpleType>
+       <s:simpleType name="SessionStatus">
+@@ -284,4 +285,4 @@
+       <http:address location="http://isisdev1.tig.ucla.edu/iws/v4.asmx" />
+     </port>
+   </service>
+-</definitions>
+\ No newline at end of file
++</definitions>
+diff --git a/ext/soap/tests/bugs/bug77945.phpt b/ext/soap/tests/bugs/bug77945.phpt
+new file mode 100644
+index 0000000..5800330
+--- /dev/null
++++ b/ext/soap/tests/bugs/bug77945.phpt
+@@ -0,0 +1,18 @@
++--TEST--
++Bug #77945: Segmentation fault when constructing SoapClient with WSDL_CACHE_BOTH
++--SKIPIF--
++<?php
++if (!extension_loaded('soap')) die('skip soap extension not available');
++?>
++--FILE--
++<?php
++
++// The important part is to have a restriction enumeration with value="".
++$client = new SoapClient(__DIR__ . '/bug29236.wsdl', array(
++    'cache_wsdl' => WSDL_CACHE_BOTH
++));
++
++?>
++===DONE===
++--EXPECT--
++===DONE===

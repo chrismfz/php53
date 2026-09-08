@@ -1,0 +1,50 @@
+commit 0f724453c03b7ff500563c019f5dab736d326ad8
+Author: Ville Hukkamaki <vhu@iki.fi>
+Date:   Tue Aug 28 23:26:13 2018 +0200
+
+    Fix bug #74764 and add a test case
+
+diff --git a/ext/standard/tests/network/bug74764.phpt b/ext/standard/tests/network/bug74764.phpt
+new file mode 100644
+index 0000000..e946167
+--- /dev/null
++++ b/ext/standard/tests/network/bug74764.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Bug #74764 IPv6 bindto fails with stream_socket_client()
++--SKIPIF--
++<?php
++/* following copied straight from the tcp6loop.phpt */
++@stream_socket_client('tcp://[::1]:0', $errno);
++if ($errno != 111) die('skip IPv6 not supported.');
++?>
++--FILE--
++<?php
++$context = stream_context_create(
++    array('socket' => array('bindto' => "[::]:0"))
++    );
++    $socket = stream_socket_client('tcp://localhost:1443', $errno, $errstr, 5, STREAM_CLIENT_CONNECT, $context);
++
++$context = stream_context_create(
++    array('socket' => array('bindto' => "0.0.0.0:0"))
++    );
++    $socket = stream_socket_client('tcp://localhost:1443', $errno, $errstr, 5, STREAM_CLIENT_CONNECT, $context);
++?>
++--EXPECTF--
++Warning: stream_socket_client(): unable to connect to tcp://localhost:1443 (%s) in %s on line %d
++
++Warning: stream_socket_client(): unable to connect to tcp://localhost:1443 (%s) in %s on line %d
+diff --git a/main/network.c b/main/network.c
+index 8a32636..145911d 100644
+--- a/main/network.c
++++ b/main/network.c
+@@ -863,6 +863,9 @@ php_socket_t php_network_connect_socket_to_host(const char *host, unsigned short
+ 				int local_address_len = 0;
+ 
+ 				if (sa->sa_family == AF_INET) {
++					if (strchr(bindto,':')) {
++						goto skip_bind;
++					}
+ 					struct sockaddr_in *in4 = emalloc(sizeof(struct sockaddr_in));
+ 
+ 					local_address = (struct sockaddr*)in4;

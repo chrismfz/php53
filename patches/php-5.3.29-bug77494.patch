@@ -1,0 +1,47 @@
+commit 73f222d722460bebb98a1d2f11f891eefe4defde
+Author: Dmitry Stogov <dmitry@zend.com>
+Date:   Thu Jan 24 13:06:36 2019 +0300
+
+    Fixed bug #77494 (Disabling class causes segfault on member access)
+
+diff --git a/Zend/tests/bug77494.phpt b/Zend/tests/bug77494.phpt
+new file mode 100644
+index 0000000000..1793f6b219
+--- /dev/null
++++ b/Zend/tests/bug77494.phpt
+@@ -0,0 +1,13 @@
++--TEST--
++Bug #77494 (Disabling class causes segfault on member access)
++--SKIPIF--
++<?php if (!extension_loaded("curl")) exit("skip curl extension not loaded"); ?>
++--INI--
++disable_classes=CURLFile
++--FILE--
++<?php
++$a = new CURLFile();
++var_dump($a->name);
++?>
++--EXPECTF--
++Fatal error: Class 'CURLFile' not found in %sbug77494.php on line %d
+diff --git a/Zend/zend_API.c b/Zend/zend_API.c
+index 600520552c..d4b1502734 100644
+--- a/Zend/zend_API.c
++++ b/Zend/zend_API.c
+@@ -2855,6 +2855,17 @@ static zend_object *display_disabled_class(zend_class_entry *class_type) /* {{{
+ 	retval = zend_objects_new(&intern, class_type TSRMLS_CC);
+ 	ALLOC_HASHTABLE(intern->properties);
+ 	zend_hash_init(intern->properties, 0, NULL, ZVAL_PTR_DTOR, 0);
++
++	/* Initialize default properties */
++	if (EXPECTED(class_type->default_properties.nNumOfElements != 0)) {
++		zval *p = intern->properties;
++		zval *end = p + class_type->default_properties.nNumOfElements;
++		do {
++			p->type = 0;
++			p++;
++		} while (p != end);
++	}
++
+ 	zend_error(E_WARNING, "%s() has been disabled for security reasons", class_type->name);
+ 	return retval;
+ }

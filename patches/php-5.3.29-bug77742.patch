@@ -1,0 +1,40 @@
+commit e7d40afb7a7984174eb132a14b7a6621c8e76258
+Author: Nikita Popov <nikita.ppv@gmail.com>
+Date:   Thu Mar 14 17:24:50 2019 +0100
+
+    Fixed bug #77742
+    
+    By avoiding integer overflow in the implementation entirely. The
+    multiplication was already explicitly checked for overflow, so also
+    add a check for the addition and remove the overflow checks after
+    the calculation.
+
+diff --git a/ext/bcmath/libbcmath/src/num2long.c b/ext/bcmath/libbcmath/src/num2long.c
+index 81e82a6fac..228f6645a2 100644
+--- a/ext/bcmath/libbcmath/src/num2long.c
++++ b/ext/bcmath/libbcmath/src/num2long.c
+@@ -54,12 +54,19 @@ bc_num2long (num)
+   /* Extract the int value, ignore the fraction. */
+   val = 0;
+   nptr = num->n_value;
+-  for (index=num->n_len; (index>0) && (val<=(LONG_MAX/BASE)); index--)
+-    val = val*BASE + *nptr++;
++  for (index = num->n_len; index > 0; index--) {
++    char n = *nptr++;
+ 
+-  /* Check for overflow.  If overflow, return zero. */
+-  if (index>0) val = 0;
+-  if (val < 0) val = 0;
++    if (val > LONG_MAX/BASE) {
++      return 0;
++    }
++    val *= BASE;
++
++    if (val > LONG_MAX - n) {
++      return 0;
++    }
++    val += n;
++  }
+ 
+   /* Return the value. */
+   if (num->n_sign == PLUS)

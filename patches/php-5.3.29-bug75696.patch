@@ -1,0 +1,56 @@
+commit 2677d438502b68a967d46ffadfadc138070ce762
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Fri Aug 24 17:59:44 2018 +0200
+
+    Fix #75696: posix_getgrnam fails to print details of group
+    
+    According to the POSIX specification of `getgrnam_r()` the result of
+    `sysconf(_SC_GETGR_R_SIZE_MAX)` is an initial value suggested for the
+    size of the buffer, and `ERANGE` signals that insufficient storage was
+    supplied.  So if we get `ERANGE`, we try again with a buffer twice as
+    big, and so on, instead of failing.
+
+diff --git a/ext/posix/posix.c b/ext/posix/posix.c
+index 066139d..27d91f8 100644
+--- a/ext/posix/posix.c
++++ b/ext/posix/posix.c
+@@ -1074,9 +1074,15 @@ PHP_FUNCTION(posix_getgrnam)
+ 		RETURN_FALSE;
+ 	}
+ 	buf = emalloc(buflen);
++try_again:
+ 	g = &gbuf;
+ 
+ 	if (getgrnam_r(name, g, buf, buflen, &g) || g == NULL) {
++		if (errno == ERANGE) {
++			buflen *= 2;
++			buf = erealloc(buf, buflen);
++			goto try_again;
++		}
+ 		POSIX_G(last_error) = errno;
+ 		efree(buf);
+ 		RETURN_FALSE;
+diff --git a/ext/posix/tests/bug75696.phpt b/ext/posix/tests/bug75696.phpt
+new file mode 100644
+index 0000000..e37f807
+--- /dev/null
++++ b/ext/posix/tests/bug75696.phpt
+@@ -0,0 +1,18 @@
++--TEST--
++Bug #75696 (posix_getgrnam fails to print details of group)
++--SKIPIF--
++<?php
++if (!extension_loaded('posix')) die('skip posix extension not available');
++?>
++--FILE--
++<?php
++$gid = posix_getgid();
++$name = posix_getgrgid($gid);
++if ($name == false) return 1;
++$info = posix_getgrnam($name["name"]);
++var_dump(is_array($info));
++?>
++===DONE===
++--EXPECT--
++bool(true)
++===DONE===

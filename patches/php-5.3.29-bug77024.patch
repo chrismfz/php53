@@ -1,0 +1,22 @@
+commit 91c6fb881e7b98c968d270bdf7f0051b4c2b2c9c
+Author: Craig Duncan <git@duncanc.co.uk>
+Date:   Sun Apr 28 00:44:48 2019 +0200
+
+    Fix #77024: SplFileObject::__toString() may return array
+    
+    - Correct the behaviour of casting spl files to strings
+    - Add a test for Bug 77024
+
+diff --git a/ext/spl/spl_directory.c b/ext/spl/spl_directory.c
+index 47b3521..4f27464 100644
+--- a/ext/spl/spl_directory.c
++++ b/ext/spl/spl_directory.c
+@@ -3111,7 +3111,7 @@ static const zend_function_entry spl_SplFileObject_functions[] = {
+ 	SPL_ME(SplFileObject, seek,           arginfo_file_object_seek,          ZEND_ACC_PUBLIC)
+ 	/* mappings */
+ 	SPL_MA(SplFileObject, getCurrentLine, SplFileObject, fgets,      arginfo_splfileinfo_void, ZEND_ACC_PUBLIC)
+-	SPL_MA(SplFileObject, __toString,     SplFileObject, current,    arginfo_splfileinfo_void, ZEND_ACC_PUBLIC)
++	SPL_MA(SplFileObject, __toString,     SplFileObject, fgets,      arginfo_splfileinfo_void, ZEND_ACC_PUBLIC)
+ 	PHP_FE_END
+ };
+ 

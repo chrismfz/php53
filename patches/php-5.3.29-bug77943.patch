@@ -1,0 +1,30 @@
+commit cd94cf60a2379ccfe4619b1b9384a68b3e7a1205
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Mon Apr 29 16:14:26 2019 +0200
+
+    Fix #77943: imageantialias($image, false); does not work
+    
+    Firstly, we must not call `gdImageSetAntiAliased()` (which sets the
+    color to anti-alias), but rather modify the `gdImage.AA` flag.
+    Furthermore, we have to actually use the supplied boolean value.
+    
+    We also make sure that we don't attempt to enable anti-aliasing for
+    palette images.
+
+diff --git a/ext/gd/gd.c b/ext/gd/gd.c
+index 50d4745..231fcac 100644
+--- a/ext/gd/gd.c
++++ b/ext/gd/gd.c
+@@ -4699,7 +4699,11 @@ PHP_FUNCTION(imageantialias)
+ 	}
+ 
+ 	ZEND_FETCH_RESOURCE(im, gdImagePtr, &IM, -1, "Image", le_gd);
+-	gdImageAntialias(im, alias);
++
++	if (im->trueColor) {
++		im->AA = alias;
++	}
++
+ 	RETURN_TRUE;
+ }
+ /* }}} */

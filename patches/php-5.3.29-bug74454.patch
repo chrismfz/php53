@@ -1,0 +1,60 @@
+commit c0a389a9277070f5ef53c230f34aa5072a9f0985
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Wed Sep 5 15:05:19 2018 +0200
+
+    Fix #74454: Wrong exception being thrown when using ReflectionMethod
+    
+    If zend_throw_exception_ex() already threw an exception, we should not
+    throw again.
+
+diff --git a/ext/reflection/php_reflection.c b/ext/reflection/php_reflection.c
+index 690aaa0..bd2d824 100644
+--- a/ext/reflection/php_reflection.c
++++ b/ext/reflection/php_reflection.c
+@@ -3130,8 +3130,10 @@ ZEND_METHOD(reflection_method, __construct)
+ 	switch (Z_TYPE_P(classname)) {
+ 		case IS_STRING:
+ 			if (zend_lookup_class(Z_STRVAL_P(classname), Z_STRLEN_P(classname), &pce TSRMLS_CC) == FAILURE) {
+-				zend_throw_exception_ex(reflection_exception_ptr, 0 TSRMLS_CC,
+-						"Class %s does not exist", Z_STRVAL_P(classname)); 
++				if (!EG(exception)) {
++					zend_throw_exception_ex(reflection_exception_ptr, 0,
++							"Class %s does not exist", Z_STRVAL_P(classname));
++				}
+ 				if (classname == &ztmp) {
+ 					zval_dtor(&ztmp);
+ 				}
+diff --git a/ext/reflection/tests/bug74454.inc b/ext/reflection/tests/bug74454.inc
+new file mode 100644
+index 0000000..5136591
+--- /dev/null
++++ b/ext/reflection/tests/bug74454.inc
+@@ -0,0 +1,4 @@
++<?php
++class A {
++	if (wrongsyntax)
++}
+diff --git a/ext/reflection/tests/bug74454.phpt b/ext/reflection/tests/bug74454.phpt
+new file mode 100644
+index 0000000..d2d6e88
+--- /dev/null
++++ b/ext/reflection/tests/bug74454.phpt
+@@ -0,0 +1,18 @@
++--TEST--
++Bug #74454 (Wrong exception being thrown when using ReflectionMethod)
++--FILE--
++<?php
++spl_autoload_register('load_file');
++try {
++	$x = new ReflectionMethod('A', 'b');
++} catch (\Throwable $e) {
++	echo get_class($e), ': ', $e->getMessage(), PHP_EOL;
++}
++
++function load_file() {
++	require __DIR__ . '/bug74454.inc';
++}
++?>
++===DONE===
++--EXPECTF--
++Parse error: syntax error, unexpected T_IF, expecting T_FUNCTION in %s on line %d

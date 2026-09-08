@@ -1,0 +1,37 @@
+commit 61ed904cecbfd2eb6e5c39c22de3c215a2aee722
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Mon Jan 25 17:12:48 2021 +0100
+
+    Fix #75850: Unclear error message wrt. __halt_compiler() w/o semicolon
+    
+    We add the failure reason to the error message.
+    
+    Closes GH-6638.
+
+
+diff --git a/ext/phar/phar.c b/ext/phar/phar.c
+index 9b21eb7e2a..2749283ff5 100644
+--- a/ext/phar/phar.c
++++ b/ext/phar/phar.c
+@@ -2602,7 +2602,7 @@ int phar_flush(phar_archive_data *phar, char *user_stub, zend_long len, int conv
+ 			}
+ 			php_stream_close(newfile);
+ 			if (error) {
+-				spprintf(error, 0, "illegal stub for phar \"%s\"", phar->fname);
++				spprintf(error, 0, "illegal stub for phar \"%s\" (__HALT_COMPILER(); is missing)", phar->fname);
+ 			}
+ 			if (free_user_stub) {
+ 				zend_string_free(suser_stub);
+diff --git a/ext/phar/tests/phar_stub_error.phpt b/ext/phar/tests/phar_stub_error.phpt
+index 065078d296..ab92a05b51 100644
+--- a/ext/phar/tests/phar_stub_error.phpt
++++ b/ext/phar/tests/phar_stub_error.phpt
+@@ -48,7 +48,7 @@ __HALT_COMPILER();
+ string(48) "<?php echo "first stub\n"; __HALT_COMPILER(); ?>"
+ string(48) "<?php echo "first stub\n"; __HALT_COMPILER(); ?>"
+ bool(true)
+-Exception: illegal stub for phar "%sphar_stub_error.phar.php"
++Exception: illegal stub for phar "%sphar_stub_error.phar.php" (__HALT_COMPILER(); is missing)
+ string(48) "<?php echo "first stub\n"; __HALT_COMPILER(); ?>"
+ bool(true)
+ string(48) "<?php echo "first stub\n"; __HALT_COMPILER(); ?>"

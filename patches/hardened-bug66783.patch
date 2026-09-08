@@ -1,0 +1,63 @@
+commit a08847ab39bb512d500cf196981a3e8780c83600
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Mon Mar 15 10:26:50 2021 +0100
+
+    Fix #66783: UAF when appending DOMDocument to element
+    
+    According to the DOM standard, elements may only contain element, text,
+    processing instruction and comment nodes[1].  It is also specified that
+    a HierarchyRequestError should be thrown if a document is to be
+    inserted[2].  We follow that standard, and prevent the use-after-free
+    this way.
+    
+    [1] <https://dom.spec.whatwg.org/#node-trees>
+    [2] <https://dom.spec.whatwg.org/#mutation-algorithms>
+    
+    Closes GH-6765.
+
+diff --git a/ext/dom/php_dom.c b/ext/dom/php_dom.c
+index 6bc72e9f97..2f2878d5e1 100644
+--- a/ext/dom/php_dom.c
++++ b/ext/dom/php_dom.c
+@@ -1302,9 +1302,13 @@ int dom_hierarchy(xmlNodePtr parent, xmlNodePtr child)
+ {
+ 	xmlNodePtr nodep;
+ 
+-    if (parent == NULL || child == NULL || child->doc != parent->doc) {
+-        return SUCCESS;
+-    }
++	if (parent == NULL || child == NULL || child->doc != parent->doc) {
++		return SUCCESS;
++	}
++
++	if (child->type == XML_DOCUMENT_NODE) {
++		return FAILURE;
++	}
+ 
+ 	nodep = parent;
+ 
+diff --git a/ext/dom/tests/bug66783.phpt b/ext/dom/tests/bug66783.phpt
+new file mode 100644
+index 0000000000..98981a88f6
+--- /dev/null
++++ b/ext/dom/tests/bug66783.phpt
+@@ -0,0 +1,19 @@
++--TEST--
++Bug #66783 (UAF when appending DOMDocument to element)
++--SKIPIF--
++<?php
++if (!extension_loaded('dom')) die('skip dom extension not available');
++?>
++--FILE--
++<?php
++$doc = new DomDocument;
++$doc->loadXML('<root></root>');
++$e = $doc->createElement('e');
++try {
++    $e->appendChild($doc);
++} catch (DOMException $ex) {
++    echo $ex->getMessage(), PHP_EOL;
++}
++?>
++--EXPECTF--
++Hierarchy Request Error
