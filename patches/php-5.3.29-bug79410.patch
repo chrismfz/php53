@@ -1,0 +1,19 @@
+diff --git a/ext/standard/exec.c b/ext/standard/exec.c
+index a31f877..a353c74 100644
+--- a/ext/standard/exec.c
++++ b/ext/standard/exec.c
+@@ -156,6 +156,14 @@ PHPAPI int php_exec(int type, char *cmd, zval *array, zval *return_value TSRMLS_
+ 			b = buf;
+ 		}
+ 		if (bufl) {
++			/* output remaining data in buffer */
++			if (type == 1 && buf != b) {
++				PHPWRITE(buf, bufl);
++				int php_output_get_level = OG(ob_nesting_level);
++				if (php_output_get_level < 1) {
++					sapi_flush(TSRMLS_C);
++				}
++			}
+ 			/* strip trailing whitespaces if we have not done so already */
+ 			if ((type == 2 && buf != b) || type != 2) {
+ 				l = bufl;

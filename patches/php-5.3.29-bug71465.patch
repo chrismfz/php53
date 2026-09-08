@@ -1,0 +1,11 @@
+diff -apruN php-5.3.29.orig/ext/phar/phar_object.c php-5.3.29/ext/phar/phar_object.c
+--- php-5.3.29.orig/ext/phar/phar_object.c	2016-12-12 06:16:32.733661109 -0500
++++ php-5.3.29/ext/phar/phar_object.c	2016-12-12 06:17:16.688247511 -0500
+@@ -605,6 +605,7 @@ PHP_METHOD(Phar, webPhar)
+ 
+ 	if ((strlen(sapi_module.name) == sizeof("cgi-fcgi")-1 && !strncmp(sapi_module.name, "cgi-fcgi", sizeof("cgi-fcgi")-1))
+ 		|| (strlen(sapi_module.name) == sizeof("fpm-fcgi")-1 && !strncmp(sapi_module.name, "fpm-fcgi", sizeof("fpm-fcgi")-1))
++		|| (strlen(sapi_module.name) == sizeof("litespeed")-1 && !strncmp(sapi_module.name, "litespeed", sizeof("litespeed")-1))
+ 		|| (strlen(sapi_module.name) == sizeof("cgi")-1 && !strncmp(sapi_module.name, "cgi", sizeof("cgi")-1))) {
+ 
+ 		if (PG(http_globals)[TRACK_VARS_SERVER]) {

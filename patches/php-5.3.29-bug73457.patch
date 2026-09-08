@@ -1,0 +1,127 @@
+commit 742783c3ee4df424b5bd9130028951259ca52860
+Author: Ville Hukkamaki <vhu@iki.fi>
+Date:   Fri Aug 24 22:49:53 2018 +0200
+
+    Fixed bug #73457
+    
+    Correctly report errors when opening FTP data connection.
+
+diff --git a/ext/ftp/tests/server.inc b/ext/ftp/tests/server.inc
+index 06c0d0d..2d4055f 100644
+--- a/ext/ftp/tests/server.inc
++++ b/ext/ftp/tests/server.inc
+@@ -318,7 +318,7 @@ if ($pid) {
+ 				fputs($s, "550 No file named \"{$matches [1]}\"\r\n");
+ 				break;
+ 			}
+-		}elseif (preg_match('/^RETR ([\w\h]+)/', $buf, $matches)) {
++		}elseif (preg_match('/^RETR ([\/]*[\w\h]+)/', $buf, $matches)) {
+ 			if(!empty($pasv)){
+ 				;
+ 			}
+@@ -374,6 +374,9 @@ if ($pid) {
+ 					fputs($fs, "Bar\r\n");
+ 					fputs($s, "226 Closing data Connection.\r\n");
+ 					break;
++				case "/bug73457":
++					fputs($s, "150 File status okay; about to open data connection.\r\n");
++					break;
+ 				default:
+ 					fputs($s, "550 {$matches[1]}: No such file or directory \r\n");
+ 					break;
+@@ -384,6 +388,9 @@ if ($pid) {
+ 
+ 
+ 		}elseif (preg_match('/^PASV/', $buf, $matches)) {
++			if (!empty($bug73457)) {
++				$pasv_port=1234;
++			}
+ 			$port = $pasv_port;
+ 			$p2 = $port % ((int) 1 << 8);
+ 			$p1 = ($port-$p2)/((int) 1 << 8);
+@@ -415,6 +422,8 @@ if ($pid) {
+ 
+ 		}elseif (preg_match('/^REST \d+/', $buf, $matches)) {
+ 			fputs($s, "350 OK\r\n");
++		}elseif (preg_match('/^SIZE \/bug73457/', $buf)) {
++			fputs($s, "213 10\r\n");
+ 		}
+
+        else {
+diff --git a/ext/standard/ftp_fopen_wrapper.c b/ext/standard/ftp_fopen_wrapper.c
+index e73787c..9ab27f4 100644
+--- a/ext/standard/ftp_fopen_wrapper.c
++++ b/ext/standard/ftp_fopen_wrapper.c
+@@ -430,6 +430,7 @@ php_stream * php_stream_url_wrap_ftp(php_stream_wrapper *wrapper, const char *pa
+ 	int8_t read_write = 0;
+ 	char *transport;
+ 	int transport_len;
++	char *error_message = NULL;
+ 
+ 	tmp_line[0] = '\0';
+ 
+@@ -557,9 +558,10 @@ php_stream * php_stream_url_wrap_ftp(php_stream_wrapper *wrapper, const char *pa
+ 		hoststart = resource->host;
+ 	}
+ 	transport_len = spprintf(&transport, 0, "tcp://%s:%d", hoststart, portno);
+-	datastream = php_stream_xport_create(transport, transport_len, REPORT_ERRORS, STREAM_XPORT_CLIENT | STREAM_XPORT_CONNECT, NULL, NULL, context, NULL, NULL);
++	datastream = php_stream_xport_create(transport, transport_len, REPORT_ERRORS, STREAM_XPORT_CLIENT | STREAM_XPORT_CONNECT, NULL, NULL, context, &error_message, NULL);
+ 	efree(transport);
+ 	if (datastream == NULL) {
++		tmp_line[0]='\0';
+ 		goto errexit;
+ 	}
+ 
+@@ -583,6 +585,7 @@ php_stream * php_stream_url_wrap_ftp(php_stream_wrapper *wrapper, const char *pa
+ 		php_stream_wrapper_log_error(wrapper, options, "Unable to activate SSL mode");
+ 		php_stream_close(datastream);
+ 		datastream = NULL;
++		tmp_line[0]='\0';
+ 		goto errexit;
+ 	}
+ 
+@@ -602,6 +605,11 @@ errexit:
+ 	}
+ 	if (tmp_line[0] != '\0')
+ 		php_stream_wrapper_log_error(wrapper, options TSRMLS_CC, "FTP server reports %s", tmp_line);
++
++	if (error_message) {
++		php_stream_wrapper_log_error(wrapper, options, "Failed to set up data channel: %s", error_message);
++		efree(error_message);
++	}
+ 	return NULL;
+ }
+ /* }}} */
+diff --git a/ext/standard/tests/streams/bug73457.phpt b/ext/standard/tests/streams/bug73457.phpt
+new file mode 100644
+index 0000000..f44c26d
+--- /dev/null
++++ b/ext/standard/tests/streams/bug73457.phpt
+@@ -0,0 +1,27 @@
++--TEST--
++Bug #73457. Wrong error message when fopen FTP wrapped fails to open data connection
++--SKIPIF--
++<?php
++if (array_search('ftp',stream_get_wrappers()) === FALSE) die("skip ftp wrapper not available.");
++if (!function_exists('pcntl_fork')) die("skip pcntl_fork() not available.");
++?>
++--FILE--
++<?php
++
++$bug73457=true;
++require __DIR__ . "/../../../ftp/tests/server.inc";
++
++$path="ftp://127.0.0.1:" . $port."/bug73457";
++
++$ds=file_get_contents($path);
++var_dump($ds);
++?>
++==DONE== 
++--EXPECTF--
++string(%d) "EPSV
++"
++
++Warning: file_get_contents(ftp://127.0.0.1:%d/bug73457): failed to open stream: FTP server reports %d %d
++ in %s on line %d
++bool(false)
++==DONE==

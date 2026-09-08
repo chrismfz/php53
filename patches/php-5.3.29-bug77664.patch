@@ -1,0 +1,22 @@
+commit 4a72dd782df3089a0d944a7e51eabebdf1f1abc3
+Author: Xinchen Hui <laruence@gmail.com>
+Date:   Mon Feb 25 14:40:53 2019 +0800
+
+    Fixed bug #77664 (Segmentation fault when using undefined constant in custom wrapper)
+
+diff --git a/main/streams/userspace.c b/main/streams/userspace.c
+index c72c7765f0..4925e41ac3 100644
+--- a/main/streams/userspace.c
++++ b/main/streams/userspace.c
+@@ -289,7 +289,10 @@ static zval *user_stream_create_object(struct php_user_stream_wrapper *uwrap, php
+ 	zval *object;
+ 	/* create an instance of our class */
+ 	ALLOC_ZVAL(object);
+-	object_init_ex(object, uwrap->ce);
++	if (object_init_ex(object, uwrap->ce) == FAILURE) {
++		object->type = 0;
++		return NULL;
++	}
+ 	Z_SET_REFCOUNT_P(object, 1);
+ 	Z_SET_ISREF_P(object);
+ 

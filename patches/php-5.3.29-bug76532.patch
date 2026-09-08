@@ -1,0 +1,56 @@
+commit bf5a802f5a87010cee94df1cda2918f3be8ae96e
+Author: Marcus Schwarz <schwarz@sc-networks.com>
+Date:   Thu Jun 28 14:10:41 2018 +0200
+
+    Fixed bug #76532 (excessive memory usage in mb_strimwidth)
+
+diff --git a/ext/mbstring/libmbfl/mbfl/mbfilter.c b/ext/mbstring/libmbfl/mbfl/mbfilter.c
+index 4986472..35ca9d3 100644
+--- a/ext/mbstring/libmbfl/mbfl/mbfilter.c
++++ b/ext/mbstring/libmbfl/mbfl/mbfilter.c
+@@ -1875,7 +1875,7 @@ mbfl_strimwidth(
+ 	mbfl_string_init(result);
+ 	result->no_language = string->no_language;
+ 	result->no_encoding = string->no_encoding;
+-	mbfl_memory_device_init(&pc.device, width, 0);
++	mbfl_memory_device_init(&pc.device, MIN(string->len, width), 0);
+ 
+ 	/* output code filter */
+ 	pc.decoder = mbfl_convert_filter_new(
+diff --git a/ext/mbstring/libmbfl/mbfl/mbfilter.h b/ext/mbstring/libmbfl/mbfl/mbfilter.h
+index 565ed32..215e07d 100644
+--- a/ext/mbstring/libmbfl/mbfl/mbfilter.h
++++ b/ext/mbstring/libmbfl/mbfl/mbfilter.h
+@@ -114,6 +114,13 @@
+ #define MBFL_OUTPUTFILTER_ILLEGAL_MODE_ENTITY 3
+ 
+ /*
++ * convenience macros
++ */
++#ifndef MIN
++#define MIN(a,b) ((a)<(b)?(a):(b))
++#endif
++
++/*
+  * buffering converter
+  */
+ typedef struct _mbfl_buffer_converter mbfl_buffer_converter;
+diff --git a/ext/mbstring/tests/bug76532.phpt b/ext/mbstring/tests/bug76532.phpt
+new file mode 100644
+index 0000000..e61e403
+--- /dev/null
++++ b/ext/mbstring/tests/bug76532.phpt
+@@ -0,0 +1,12 @@
++--TEST--
++Bug #76532 (Integer overflow and excessive memory usage in mb_strimwidth)
++--SKIPIF--
++<?php require 'skipif.inc'; ?>
++--FILE--
++<?php
++$string_to_trim = '得很幸福。有一天，一个长得很丑的老人带着一只木马来到王';
++$width = 2147483647;
++var_dump(mb_strimwidth($string_to_trim, 0, $width));
++?>
++--EXPECT--
++string(81) "得很幸福。有一天，一个长得很丑的老人带着一只木马来到王"
+\ No newline at end of file

@@ -1,0 +1,308 @@
+From 6af153c0351892fddb3268bcbefcf452d9209113 Mon Sep 17 00:00:00 2001
+From: Dmitriy Popov <dpopov@cloudlinux.com>
+Date: Tue, 27 Jun 2023 14:08:16 +0300
+Subject: [PATCH] Fixes for MySQL 8.0 compatibility
+
+Partially backport the following upstream commits:
+
+    ---- 1 ----
+    From 202a0697f3f1771f241e7dadbe1ecbb8cb72b6c9 Mon Sep 17 00:00:00 2001
+    From: Daniel Black <daniel@mariadb.org>
+    Date: Sat, 29 Aug 2020 17:18:57 +1000
+    Subject: [PATCH] mysqli: use native api
+
+    Tested with:
+    * mysql-5.6.49-linux-glibc2.12-x86_64
+    * mysql-5.7.31-linux-glibc2.12-x86_64
+    * mysql-8.0.21-linux-glibc2.17-x86_64
+    * mariadb-10.5.6
+
+    configure --with-mysqli=/usr/local/$version/bin/mysql_config   --with-pdo-mysql=/usr/local/$version
+
+    MySQL-8.0 removed my_bool
+    Some options where deprecated in mysql-8.0
+
+    MY_CHARSET_INFO used with exposed api mysql_get_character_set_info
+    rather than internal structures.
+
+    ---- 2 ----
+    From c9abb0c0ac8a9bce1d8d62e45dc3ff9fc9ea5308 Mon Sep 17 00:00:00 2001
+    From: Daniel Black <daniel@mariadb.org>
+    Date: Sat, 12 Sep 2020 15:29:23 +1000
+    Subject: [PATCH] mysql: native mysql-8.0 uses _Bool
+
+    MySQL-8.0 removes option MYSQLI_OPT_SSL_VERIFY_SERVER_CERT
+
+    ---- 3 ----
+    From a7a590211ef70116ab922a8398f4c296ddd8f6ab Mon Sep 17 00:00:00 2001
+    From: "Christoph M. Becker" <cmbecker69@gmx.de>
+    Date: Fri, 6 May 2022 18:02:42 +0200
+    Subject: [PATCH] Fix mysqli tests wrt. MySQL 8.0.28
+
+    As of MySQL 8.0.28, `utf8mb3` charset is reported by the server, but
+    mysqlnd doesn't support it yet.  As a stop-gap measure, we ignore that
+    charset for now.
+
+    Closes GH-8480.
+    // See https://github.com/php/php-src/issues/8478 also
+
+    ---- 4 ----
+    From 35a28fac51e4b210f8f3f51b754786908a977462 Mon Sep 17 00:00:00 2001
+    From: =?UTF-8?q?Johannes=20Schl=C3=BCter?= <johannes@php.net>
+    Date: Fri, 14 Apr 2017 16:30:10 +0200
+    Subject: [PATCH] Add support for MySQL 8's Unicode types
+
+Signed-off-by: Dmitriy Popov <dpopov@cloudlinux.com>
+---
+ ext/mysqli/mysqli.c                        |  2 +-
+ ext/mysqli/mysqli_api.c                    | 14 +++++++
+ ext/mysqli/mysqli_nonapi.c                 |  5 +++
+ ext/mysqli/php_mysqli_structs.h            | 12 +++---
+ ext/mysqli/tests/mysqli_character_set.phpt |  3 +-
+ ext/mysqli/tests/mysqli_options.phpt       |  3 +-
+ ext/mysqli/tests/mysqli_set_charset.phpt   |  3 +-
+ ext/mysqlnd/mysqlnd_charset.c              | 47 ++++++++++++++++++++++
+ ext/pdo_mysql/php_pdo_mysql_int.h          |  3 ++
+ 9 files changed, 83 insertions(+), 9 deletions(-)
+
+diff --git a/ext/mysqli/mysqli.c b/ext/mysqli/mysqli.c
+index f19f6a85..528980c9 100644
+--- a/ext/mysqli/mysqli.c
++++ b/ext/mysqli/mysqli.c
+@@ -700,7 +700,7 @@ PHP_MINIT_FUNCTION(mysqli)
+ #ifdef MYSQLND_STRING_TO_INT_CONVERSION
+ 	REGISTER_LONG_CONSTANT("MYSQLI_OPT_INT_AND_FLOAT_NATIVE", MYSQLND_OPT_INT_AND_FLOAT_NATIVE, CONST_CS | CONST_PERSISTENT);
+ #endif
+-#if MYSQL_VERSION_ID > 50110 || defined(MYSQLI_USE_MYSQLND)
++#if (MYSQL_VERSION_ID > 50110 && MYSQL_VERSION_ID < 80000) || (MYSQL_VERSION_ID >= 100000) || defined(MYSQLI_USE_MYSQLND)
+ 	REGISTER_LONG_CONSTANT("MYSQLI_OPT_SSL_VERIFY_SERVER_CERT", MYSQL_OPT_SSL_VERIFY_SERVER_CERT, CONST_CS | CONST_PERSISTENT);
+ #endif
+ 
+diff --git a/ext/mysqli/mysqli_api.c b/ext/mysqli/mysqli_api.c
+index 4f66069e..c79b136f 100644
+--- a/ext/mysqli/mysqli_api.c
++++ b/ext/mysqli/mysqli_api.c
+@@ -640,7 +640,11 @@ PHP_FUNCTION(mysqli_change_user)
+ 	int			user_len, password_len, dbname_len;
+ 	ulong		rc;
+ #if !defined(MYSQLI_USE_MYSQLND) && defined(HAVE_MYSQLI_SET_CHARSET)
++#if MYSQL_VERSION_ID >= 80000
++	MY_CHARSET_INFO old_charset;
++#else
+ 	const		CHARSET_INFO * old_charset;
++#endif /* MYSQL_VERSION_ID >= 80000 */
+ #endif
+ 
+ 	if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Osss", &mysql_link, mysqli_link_class_entry, &user, &user_len, &password, &password_len, &dbname, &dbname_len) == FAILURE) {
+@@ -649,7 +653,11 @@ PHP_FUNCTION(mysqli_change_user)
+ 	MYSQLI_FETCH_RESOURCE_CONN(mysql, &mysql_link, MYSQLI_STATUS_VALID);
+ 
+ #if !defined(MYSQLI_USE_MYSQLND) && defined(HAVE_MYSQLI_SET_CHARSET)
++#if MYSQL_VERSION_ID >= 80000
++	mysql_get_character_set_info(mysql->mysql, &old_charset);
++#else
+ 	old_charset = mysql->mysql->charset;
++#endif /* MYSQL_VERSION_ID >= 80000 */
+ #endif
+ 
+ #if defined(MYSQLI_USE_MYSQLND)
+@@ -669,7 +677,11 @@ PHP_FUNCTION(mysqli_change_user)
+ 		  5.0 doesn't support it. Support added in 5.1.23 by fixing the following bug :
+ 		  Bug #30472 libmysql doesn't reset charset, insert_id after succ. mysql_change_user() call
+ 		*/
++#if MYSQL_VERSION_ID >= 80000
++		rc = mysql_set_character_set(mysql->mysql, old_charset.csname);
++#else
+ 		rc = mysql_set_character_set(mysql->mysql, old_charset->csname);
++#endif /* MYSQL_VERSION_ID >= 80000 */
+ 	}
+ #endif
+ 
+@@ -1762,10 +1774,12 @@ static int mysqli_options_get_option_zval_type(int option)
+ #ifdef MYSQL_OPT_READ_TIMEOUT
+ 		case MYSQL_OPT_READ_TIMEOUT:
+ 		case MYSQL_OPT_WRITE_TIMEOUT:
++#if MYSQL_VERSION_ID < 80000
+ 		case MYSQL_OPT_GUESS_CONNECTION:
+ 		case MYSQL_OPT_USE_EMBEDDED_CONNECTION:
+ 		case MYSQL_OPT_USE_REMOTE_CONNECTION:
+ 		case MYSQL_SECURE_AUTH:
++#endif # /* removed in MySQL-8.0 */
+ #endif /* MySQL 4.1.1 */
+ #ifdef MYSQL_OPT_RECONNECT
+ 		case MYSQL_OPT_RECONNECT:
+diff --git a/ext/mysqli/mysqli_nonapi.c b/ext/mysqli/mysqli_nonapi.c
+index f1e805ce..6c2e65ad 100644
+--- a/ext/mysqli/mysqli_nonapi.c
++++ b/ext/mysqli/mysqli_nonapi.c
+@@ -258,7 +258,12 @@ void mysqli_common_connect(INTERNAL_FUNC
+ 	php_mysqli_set_error(mysql_errno(mysql->mysql), (char *) mysql_error(mysql->mysql) TSRMLS_CC);
+ 
+ #if !defined(MYSQLI_USE_MYSQLND)
++#if MYSQL_VERSION_ID >= 80000
++	char reconnect = MyG(reconnect);
++	mysql_options(mysql->mysql, MYSQL_OPT_RECONNECT, (char *)&reconnect);
++#else
+ 	mysql->mysql->reconnect = MyG(reconnect);
++#endif /* MYSQL_VERSION_ID >= 80000 */
+
+        /* set our own local_infile handler */
+        php_set_local_infile_handler_default(mysql);
+diff --git a/ext/mysqli/php_mysqli_structs.h b/ext/mysqli/php_mysqli_structs.h
+index f6314962..dd5e5fca 100644
+--- a/ext/mysqli/php_mysqli_structs.h
++++ b/ext/mysqli/php_mysqli_structs.h
+@@ -60,8 +60,6 @@
+ #define HAVE_ULONG
+ #endif
+ 
+-#include <my_global.h>
+-
+ #if !defined(HAVE_MBRLEN) && defined(WE_HAD_MBRLEN)
+ #define HAVE_MBRLEN 1
+ #endif
+@@ -70,6 +68,10 @@
+ #define HAVE_MBSTATE_T 1
+ #endif
+ 
++#include <mysql.h>
++#if MYSQL_VERSION_ID >= 80000 &&  MYSQL_VERSION_ID < 100000
++typedef _Bool		my_bool;
++#else
+ /*
+   We need more than mysql.h because we need CHARSET_INFO in one place.
+   This order has been borrowed from the ODBC driver. Nothing can be removed
+@@ -77,13 +79,13 @@
+ */
+ 
+ #include <my_sys.h>
+-#include <mysql.h>
+-#include <errmsg.h>
+ #include <my_list.h>
+ #include <m_string.h>
+-#include <mysqld_error.h>
+ #include <my_list.h>
+ #include <m_ctype.h>
++#endif /* MYSQL_VERSION_ID >= 80000 */
++#include <errmsg.h>
++#include <mysqld_error.h>
+ #include "mysqli_libmysql.h"
+ #endif /* MYSQLI_USE_MYSQLND */
+ 
+diff --git a/ext/mysqli/tests/mysqli_character_set.phpt b/ext/mysqli/tests/mysqli_character_set.phpt
+index 1bfe9cbd..ce59be36 100644
+--- a/ext/mysqli/tests/mysqli_character_set.phpt
++++ b/ext/mysqli/tests/mysqli_character_set.phpt
+@@ -49,7 +49,8 @@ if (version_compare(PHP_VERSION, '5.9.9', '>') == 1) {
+ 		/* The server currently 17.07.2007 can't handle data sent in ucs2 */
+ 		/* The server currently 16.08.2010 can't handle data sent in utf16 and utf32 */
+ 		/* The server currently 02.09.2011 can't handle data sent in utf16le */
+-		if ($charset['Charset'] == 'ucs2' || $charset['Charset'] == 'utf16' || $charset['Charset'] == 'utf32' || 'utf16le' == $charset['Charset']) {
++		/* As of MySQL 8.0.28, `SHOW CHARACTER SET` contains utf8mb3, but that is not yet supported by mysqlnd */
++		if ($charset['Charset'] == 'ucs2' || $charset['Charset'] == 'utf16' || $charset['Charset'] == 'utf32' || 'utf16le' == $charset['Charset'] || 'utf8mb3' == $charset['Charset']) {
+ 			continue;
+ 		}
+ 
+diff --git a/ext/mysqli/tests/mysqli_options.phpt b/ext/mysqli/tests/mysqli_options.phpt
+index 5daaa597..bb2a740c 100644
+--- a/ext/mysqli/tests/mysqli_options.phpt
++++ b/ext/mysqli/tests/mysqli_options.phpt
+@@ -88,7 +88,8 @@ require_once('skipifconnectfailure.inc');
+ 		$k = $charset['Charset'];
+ 		/* The server currently 17.07.2007 can't handle data sent in ucs2 */
+ 		/* The server currently 16.08.2010 can't handle data sent in utf16 and utf32 */
+-		if ($charset['Charset'] == 'ucs2' || $charset['Charset'] == 'utf16' || $charset['Charset'] == 'utf32') {
++		/* As of MySQL 8.0.28, `SHOW CHARACTER SET` contains utf8mb3, but that is not yet supported by mysqlnd */
++		if ($charset['Charset'] == 'ucs2' || $charset['Charset'] == 'utf16' || $charset['Charset'] == 'utf32' || $charset['Charset'] == 'utf8mb3') {
+ 			continue;
+ 		}
+ 		if (true !== mysqli_options($link, MYSQLI_SET_CHARSET_NAME, $charset['Charset'])) {
+diff --git a/ext/mysqli/tests/mysqli_set_charset.phpt b/ext/mysqli/tests/mysqli_set_charset.phpt
+index 38fe5684..e30dd574 100644
+--- a/ext/mysqli/tests/mysqli_set_charset.phpt
++++ b/ext/mysqli/tests/mysqli_set_charset.phpt
+@@ -102,7 +102,8 @@ if ((($res = mysqli_query($link, 'SHOW CHARACTER SET LIKE "latin1"', MYSQLI_STOR
+ 		printf("[016] Cannot get list of character sets\n");
+ 
+ 	while ($tmp = mysqli_fetch_assoc($res)) {
+-		if ('ucs2' == $tmp['Charset'] || 'utf16' == $tmp['Charset'] || 'utf32' == $tmp['Charset'] || 'utf16le' == $tmp['Charset'])
++		/* As of MySQL 8.0.28, `SHOW CHARACTER SET` contains utf8mb3, but that is not yet supported by mysqlnd */
++		if ('ucs2' == $tmp['Charset'] || 'utf16' == $tmp['Charset'] || 'utf32' == $tmp['Charset'] || 'utf16le' == $tmp['Charset'] || 'utf8mb3' == $tmp['Charset'])
+ 			continue;
+ 
+ 		/* Uncomment to see where it hangs - var_dump($tmp); flush(); */
+diff --git a/ext/mysqlnd/mysqlnd_charset.c b/ext/mysqlnd/mysqlnd_charset.c
+index 5983b2d8..c7284525 100644
+--- a/ext/mysqlnd/mysqlnd_charset.c
++++ b/ext/mysqlnd/mysqlnd_charset.c
+@@ -687,6 +687,53 @@ const MYSQLND_CHARSET mysqlnd_charsets[] =
+ 	{ 249, "gb18030", "gb18030_bin", 1, 4, "", mysqlnd_mbcharlen_gb18030, my_ismbchar_gb18030},
+ 
+ 	{ 254, UTF8_MB3, UTF8_MB3"_general_cs", 1, 3, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 255, UTF8_MB4, UTF8_MB4"_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 256, UTF8_MB4, UTF8_MB4"_de_pb_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 257, UTF8_MB4, UTF8_MB4"_is_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 258, UTF8_MB4, UTF8_MB4"_lv_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 259, UTF8_MB4, UTF8_MB4"_ro_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 260, UTF8_MB4, UTF8_MB4"_sl_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 261, UTF8_MB4, UTF8_MB4"_pl_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 262, UTF8_MB4, UTF8_MB4"_et_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 263, UTF8_MB4, UTF8_MB4"_es_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 264, UTF8_MB4, UTF8_MB4"_sv_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 265, UTF8_MB4, UTF8_MB4"_tr_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 266, UTF8_MB4, UTF8_MB4"_cs_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 267, UTF8_MB4, UTF8_MB4"_da_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 268, UTF8_MB4, UTF8_MB4"_lt_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 269, UTF8_MB4, UTF8_MB4"_sk_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 270, UTF8_MB4, UTF8_MB4"_es_trad_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 271, UTF8_MB4, UTF8_MB4"_la_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 272, UTF8_MB4, UTF8_MB4"_fa_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 273, UTF8_MB4, UTF8_MB4"_eo_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 274, UTF8_MB4, UTF8_MB4"_hu_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 275, UTF8_MB4, UTF8_MB4"_hr_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 276, UTF8_MB4, UTF8_MB4"_si_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 277, UTF8_MB4, UTF8_MB4"_vi_0900_ai_ci", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 278, UTF8_MB4, UTF8_MB4"_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 279, UTF8_MB4, UTF8_MB4"_de_pb_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 280, UTF8_MB4, UTF8_MB4"_is_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 281, UTF8_MB4, UTF8_MB4"_lv_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 282, UTF8_MB4, UTF8_MB4"_ro_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 283, UTF8_MB4, UTF8_MB4"_sl_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 284, UTF8_MB4, UTF8_MB4"_pl_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 285, UTF8_MB4, UTF8_MB4"_et_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 286, UTF8_MB4, UTF8_MB4"_es_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 287, UTF8_MB4, UTF8_MB4"_sv_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 288, UTF8_MB4, UTF8_MB4"_tr_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 289, UTF8_MB4, UTF8_MB4"_cs_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 290, UTF8_MB4, UTF8_MB4"_da_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 291, UTF8_MB4, UTF8_MB4"_lt_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 292, UTF8_MB4, UTF8_MB4"_sk_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 293, UTF8_MB4, UTF8_MB4"_es_trad_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 294, UTF8_MB4, UTF8_MB4"_la_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 295, UTF8_MB4, UTF8_MB4"_fa_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 296, UTF8_MB4, UTF8_MB4"_eo_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 297, UTF8_MB4, UTF8_MB4"_hu_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 298, UTF8_MB4, UTF8_MB4"_hr_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 299, UTF8_MB4, UTF8_MB4"_si_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 300, UTF8_MB4, UTF8_MB4"_vi_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
++	{ 303, UTF8_MB4, UTF8_MB4"_ja_0900_as_cs", 1, 4, "", mysqlnd_mbcharlen_utf8, check_mb_utf8_valid},
+ 	{   0, NULL, NULL, 0, 0, NULL, NULL, NULL}
+ };
+ /* }}} */
+diff --git a/ext/pdo_mysql/php_pdo_mysql_int.h b/ext/pdo_mysql/php_pdo_mysql_int.h
+index 8427f433..8ba6ed18 100644
+--- a/ext/pdo_mysql/php_pdo_mysql_int.h
++++ b/ext/pdo_mysql/php_pdo_mysql_int.h
+@@ -29,6 +29,9 @@
+ #	define PDO_MYSQL_PARAM_BIND MYSQLND_PARAM_BIND
+ #else
+ #	include <mysql.h>
++#if MYSQL_VERSION_ID >= 80000 &&  MYSQL_VERSION_ID < 100000
++typedef _Bool       my_bool;
++#endif
+ #	define PDO_MYSQL_PARAM_BIND MYSQL_BIND
+ #endif
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,60 @@
+diff -apruN php-5.3.29.orig/ext/wddx/tests/bug72790.phpt php-5.3.29/ext/wddx/tests/bug72790.phpt
+--- php-5.3.29.orig/ext/wddx/tests/bug72790.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/wddx/tests/bug72790.phpt	2016-08-25 05:49:08.830413461 -0400
+@@ -0,0 +1,35 @@
++--TEST--
++Bug 72790: wddx_deserialize null dereference with invalid xml
++--SKIPIF--
++<?php
++if (!extension_loaded('wddx')) {
++    die('skip. wddx not available');
++}
++?>
++--FILE--
++<?php
++
++$xml = <<< XML
++<?xml version='1.0' ?>
++<!DOCTYPE wddxPacket SYSTEM 'wddx_0100.dtd'>
++<wddxPacket version='1.0'>
++        |array>
++                <var name="XXXX">
++                        <boolean value="this">
++                        </boolean>
++                </var>
++                <var name="YYYY">
++                        <var name="UUUU">
++                                <var name="EZEZ">
++                                </var>
++                        </var>
++                </var>
++        </array>
++</wddxPacket>
++XML;
++
++$array = wddx_deserialize($xml);
++var_dump($array);
++?>
++--EXPECT--
++NULL
+\ No newline at end of file
+diff -apruN php-5.3.29.orig/ext/wddx/wddx.c php-5.3.29/ext/wddx/wddx.c
+--- php-5.3.29.orig/ext/wddx/wddx.c	2016-08-25 05:48:23.951709608 -0400
++++ php-5.3.29/ext/wddx/wddx.c	2016-08-25 05:49:08.831413588 -0400
+@@ -1171,9 +1171,13 @@ int php_wddx_deserialize_ex(char *value,
+ 
+ 	if (stack.top == 1) {
+ 		wddx_stack_top(&stack, (void**)&ent);
+-		*return_value = *(ent->data);
+-		zval_copy_ctor(return_value);
+-		retval = SUCCESS;
++		if(ent->data == NULL) {
++			retval = FAILURE;
++		} else {
++			*return_value = *(ent->data);
++			zval_copy_ctor(return_value);
++			retval = SUCCESS;
++		}
+ 	} else {
+ 		retval = FAILURE;
+ 	}

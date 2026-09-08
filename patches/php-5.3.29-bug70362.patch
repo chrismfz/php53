@@ -1,0 +1,13 @@
+diff --git a/ext/standard/file.c b/ext/standard/file.c
+index 8b18155..a615d73 100644
+--- a/ext/standard/file.c
++++ b/ext/standard/file.c
+@@ -1750,7 +1750,7 @@ PHP_FUNCTION(copy)
+ 		RETURN_FALSE;
+ 	}
+ 
+-	if (php_check_open_basedir(source TSRMLS_CC)) {
++	if (php_stream_locate_url_wrapper(source, NULL, 0 TSRMLS_CC) == &php_plain_files_wrapper && php_check_open_basedir(source TSRMLS_CC)) {
+ 		RETURN_FALSE;
+ 	}
+ 

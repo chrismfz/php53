@@ -1,0 +1,25 @@
+commit 398b3083163ea3571345a235a0b7453394ba0a06
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Sat Sep 21 15:56:06 2019 +0200
+
+    Fix #78579: mb_decode_numericentity: args number inconsistency
+    
+    mb_decode_numericentity() accepts a fourth optional parameter, which is
+    unused, however.  Since this parameter doesn't do any harm, and to avoid
+    the small BC break, we're keeping this parameter for PHP 7, but adjust
+    the arginfo.
+    
+    For PHP 8, we will remove this parameter.
+
+diff --git a/ext/mbstring/mbstring.c b/ext/mbstring/mbstring.c
+index c73a427..173539f 100644
+--- a/ext/mbstring/mbstring.c
++++ b/ext/mbstring/mbstring.c
+@@ -414,6 +414,7 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_mb_decode_numericentity, 0, 0, 2)
+ 	ZEND_ARG_INFO(0, string)
+ 	ZEND_ARG_INFO(0, convmap)
+ 	ZEND_ARG_INFO(0, encoding)
++	ZEND_ARG_INFO(0, is_hex)
+ ZEND_END_ARG_INFO()
+ 
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_mb_send_mail, 0, 0, 3)

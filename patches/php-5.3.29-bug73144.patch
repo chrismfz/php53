@@ -1,0 +1,44 @@
+diff -apruN php-5.3.29.orig/ext/spl/spl_array.c php-5.3.29/ext/spl/spl_array.c
+--- php-5.3.29.orig/ext/spl/spl_array.c	2016-11-13 11:26:23.191570362 -0500
++++ php-5.3.29/ext/spl/spl_array.c	2016-11-13 11:26:24.916789629 -0500
+@@ -1808,7 +1808,7 @@ void spl_array_unserialize_helper(spl_ar
+ 		ALLOC_INIT_ZVAL(intern->array);
+ 		if (!php_var_unserialize(&intern->array, &p, s + buf_len, var_hash_p TSRMLS_CC)
+ 				|| (Z_TYPE_P(intern->array) != IS_ARRAY && Z_TYPE_P(intern->array) != IS_OBJECT)) {
+-			zval_ptr_dtor(&intern->array);
++			// zval_ptr_dtor(&intern->array);
+ 			goto outexcept;
+ 		}
+ 		var_push_dtor(var_hash_p, &intern->array);
+diff -apruN php-5.3.29.orig/ext/standard/tests/serialize/bug73341.phpt php-5.3.29/ext/standard/tests/serialize/bug73341.phpt
+--- php-5.3.29.orig/ext/standard/tests/serialize/bug73341.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/standard/tests/serialize/bug73341.phpt	2016-11-13 11:26:24.918789883 -0500
+@@ -0,0 +1,27 @@
++--TEST--
++Bug #73144 (Use-afte-free in ArrayObject Deserialization)
++--FILE--
++<?php
++try {
++$token = 'a:2:{i:0;O:1:"0":2:0s:1:"0";i:0;s:1:"0";a:1:{i:0;C:11:"ArrayObject":7:0x:i:0;r0';
++$obj = unserialize($token);
++} catch(Exception $e) {
++	echo $e->getMessage()."\n";
++}
++
++try {
++$inner = 'x:i:1;O:8:"stdClass":1:{};m:a:0:{}';
++$exploit = 'C:11:"ArrayObject":'.strlen($inner).':{'.$inner.'}';
++unserialize($exploit);
++} catch(Exception $e) {
++	echo $e->getMessage()."\n";
++}
++?>
++--EXPECTF--
++Notice: unserialize(): Error at offset 71 of 79 bytes in %sbug73341.php on line %d
++Error at offset 6 of 7 bytes
++
++Notice: unserialize(): Unexpected end of serialized data in %sbug73341.php on line %d
++
++Notice: unserialize(): Error at offset 23 of 58 bytes in %sbug73341.php on line %d
++Error at offset 24 of 34 bytes
+\ No newline at end of file

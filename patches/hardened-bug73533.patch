@@ -1,0 +1,24 @@
+commit 498eb8e0529fbe1dd8a91ae3ee8592eda868d3aa
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Tue Mar 23 16:13:57 2021 +0100
+
+    Fix #73533: Invalid memory access in php_libxml_xmlCheckUTF8
+    
+    A string passed to `php_libxml_xmlCheckUTF8()` may be longer than
+    1<<31-1 bytes, so we're better using a `size_t`.
+    
+    Closes GH-6802.
+
+diff --git a/ext/libxml/libxml.c b/ext/libxml/libxml.c
+index e21d6fdbbe..fc194770e1 100644
+--- a/ext/libxml/libxml.c
++++ b/ext/libxml/libxml.c
+@@ -1182,7 +1182,7 @@ static PHP_FUNCTION(libxml_set_external_entity_loader)
+ /* {{{ Common functions shared by extensions */
+ int php_libxml_xmlCheckUTF8(const unsigned char *s)
+ {
+-	int i;
++	size_t i;
+ 	unsigned char c;
+ 
+ 	for (i = 0; (c = s[i++]);) {

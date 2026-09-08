@@ -1,0 +1,17 @@
+diff --git a/ext/zip/php_zip.c b/ext/zip/php_zip.c
+index e811030..69052ec 100644
+--- a/ext/zip/php_zip.c
++++ b/ext/zip/php_zip.c
+@@ -621,9 +621,10 @@ int php_zip_glob(char *pattern, int pattern_len, long flags, zval *return_value
+ 		}
+ 		add_next_index_string(return_value, globbuf.gl_pathv[n]+cwd_skip, 1);
+ 	}
+-
++	
++    ret = globbuf.gl_pathc;
+ 	globfree(&globbuf);
+-	return globbuf.gl_pathc;
++	return ret;
+ #else
+ 	php_error_docref(NULL TSRMLS_CC, E_ERROR, "Glob support is not available");
+ 	return 0;

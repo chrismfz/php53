@@ -1,0 +1,19 @@
+commit cc5c51e7f0732067f105d13c6d355fcab5965c2f
+Author: Jakub Zelenka <bukka@php.net>
+Date:   Sat May 11 20:07:39 2019 +0100
+
+    Fix bug #77934 (php-fpm kill -USR2 not working)
+
+diff --git a/sapi/fpm/fpm/fpm_signals.c b/sapi/fpm/fpm/fpm_signals.c
+index 0df119b..4c9f966 100644
+--- a/sapi/fpm/fpm/fpm_signals.c
++++ b/sapi/fpm/fpm/fpm_signals.c
+@@ -143,7 +143,7 @@ static void sig_soft_quit(int signo) /* {{{ */
+ 	int saved_errno = errno;
+ 
+ 	/* closing fastcgi listening socket will force fcgi_accept() exit immediately */
+-	close(0);
++	close(fpm_globals.listening_socket);
+ 	if (0 > socket(AF_UNIX, SOCK_STREAM, 0)) {
+ 		zlog(ZLOG_WARNING, "failed to create a new socket");
+ 	}

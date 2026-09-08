@@ -1,0 +1,19 @@
+diff --git a/ext/dom/php_dom.c b/ext/dom/php_dom.c
+index f8a476a..861d99b 100644
+--- a/ext/dom/php_dom.c
++++ b/ext/dom/php_dom.c
+@@ -1527,6 +1527,14 @@ void dom_normalize (xmlNodePtr nodep TSRMLS_DC)
+ 						break;
+ 					}
+ 				}
++				strContent = xmlNodeGetContent(child);
++				if (*strContent == '\0') {
++					nextp = child->next;
++					xmlUnlinkNode(child);
++					php_libxml_node_free_resource(child);
++					child = nextp;
++					continue;
++				}
+ 				break;
+ 			case XML_ELEMENT_NODE:
+ 				dom_normalize (child TSRMLS_CC);

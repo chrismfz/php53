@@ -68,6 +68,7 @@ RUN_REGRESSION_TESTS="${RUN_REGRESSION_TESTS:-1}"
 ENABLE_LEGACY_PROVIDER="${ENABLE_LEGACY_PROVIDER:-1}"
 ENABLE_IONCUBE="${ENABLE_IONCUBE:-1}"
 RUNTIME_ONLY="${RUNTIME_ONLY:-0}"
+APPLY_PATCHES="${APPLY_PATCHES:-1}"   # apply patches/series (CloudLinux security backports); 0 = pristine build
 PHP_LIBDIR_NAME="${PHP_LIBDIR_NAME:-}"
 IONCUBE_LOADER="${REPO_DIR}/ioncube/ioncube_loader_lin_${PHP_SERIES}.so"
 
@@ -800,6 +801,76 @@ run_regression_tests() {
   log "all PHP ${PHP_SERIES} production regression suites passed"
 }
 
+# ── CloudLinux security patch series ─────────────────────────────────────────
+# Apply the security/bug backports imported from CloudLinux's public EA4 SRPM
+# (see patches/README.md + tools/import-cloudlinux-patches.py) onto the freshly
+# fetched source, before buildconf. patches/ is verbatim CloudLinux, in apply
+# order; patches-local/ is our hand-maintained overlay that survives a refresh:
+# `exclude` lists series entries we skip (with reasons), and patches-local/*.patch
+# are our own adaptations, applied after the vendor series.
+#
+# Two file classes are expected to reject and are NOT failures: patch hunks under
+# */tests/ (test fixtures, never built into the runtime), and the re2c-generated
+# ext/date/lib/parse_date.c + ext/standard/var_unserializer.c — their .re source
+# applies cleanly and re2c regenerates the .c during the build, so we drop the
+# stale .c to force that. Any OTHER reject stops the build (never ship a security
+# patch that silently half-applied).
+apply_patches() {
+  [ "$APPLY_PATCHES" = "1" ] || { log "APPLY_PATCHES=0 — building pristine (no security series)"; return; }
+  local series="${SRC_DIR}/patches/series"
+  [ -f "$series" ] || { warn "no patches/series in source — building without the security backports"; return; }
+
+  pushd "$SRC_DIR" >/dev/null
+    local excl="patches-local/exclude" applied=0 skipped=0
+    log "applying CloudLinux security patch series"
+    while read -r f rest; do
+      [ -z "$f" ] && continue
+      case "$f" in \#*) continue ;; esac
+      if [ -f "$excl" ] && grep -vE '^[[:space:]]*#' "$excl" | grep -qxF "$f"; then
+        skipped=$((skipped+1)); continue
+      fi
+      local pl=1; case "$rest" in *-p0*) pl=0 ;; *-p2*) pl=2 ;; esac
+      patch -p"$pl" --no-backup-if-mismatch -s -i "patches/$f" || true
+      applied=$((applied+1))
+    done < "$series"
+
+    if [ -d patches-local ]; then
+      for lp in patches-local/*.patch; do
+        [ -e "$lp" ] || continue
+        log "  local adaptation: $lp"
+        patch -p1 --no-backup-if-mismatch -s -i "$lp" || die "local patch failed to apply: $lp"
+      done
+    fi
+
+    # Fail on any reject outside the two expected classes (tests + regenerated .c).
+    local bad
+    bad="$(find . -name '*.rej' | grep -vE '/tests/|/parse_date\.c\.rej$|/var_unserializer\.c\.rej$' || true)"
+    if [ -n "$bad" ]; then
+      warn "unexpected patch rejects:"; printf '%s\n' "$bad" >&2
+      die "refusing to build with half-applied security patches (resolve via patches-local/)"
+    fi
+
+    # The generated .c hunks for these two files reject on purpose: their .re is
+    # the source of truth and applies cleanly, but PHP 5.3 ships the .c pre-built
+    # (re2c 0.13.5) with NO make rule to rebuild parse_date.c — so patching the
+    # stale .c is both futile and version-fragile. Regenerate both from the patched
+    # .re with the flags the pristine files carry (parse_date: -d -b; the
+    # var_unserializer Makefile.frag uses -b), discarding the half-applied .c.
+    local re2c="${TOOLCHAIN}/bin/re2c"
+    [ -x "$re2c" ] || die "re2c missing at ${re2c} — toolchain must be built before apply_patches"
+    log "  regenerating ext/date/lib/parse_date.c from patched .re (re2c -d -b)"
+    "$re2c" -d -b -o ext/date/lib/parse_date.c ext/date/lib/parse_date.re
+    log "  regenerating ext/standard/var_unserializer.c from patched .re (re2c -b)"
+    "$re2c" -b -o ext/standard/var_unserializer.c ext/standard/var_unserializer.re
+    local g
+    for g in ext/date/lib/parse_date.c ext/standard/var_unserializer.c; do
+      [ -s "$g" ] || die "re2c produced an empty ${g}"
+    done
+    find . -name '*.rej' -delete 2>/dev/null || true
+    log "security series applied (${applied} patches, ${skipped} excluded; 2 generated files rebuilt)"
+  popd >/dev/null
+}
+
 main() {
   need_root
   mkdir -p "$BUILD_ROOT" "$NGM_ROOT"
@@ -839,6 +910,7 @@ main() {
     build_toolchain
   fi
 
+  apply_patches   # after the toolchain: needs re2c to regenerate parse_date.c/var_unserializer.c
   build_php
   install_runtime_extensions
   verify

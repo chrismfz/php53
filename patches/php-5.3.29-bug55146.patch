@@ -1,0 +1,66 @@
+commit 6e1980e1520306cc5ec7109ccb3d7c8a0a672689
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Sun Aug 12 19:55:09 2018 +0200
+
+    Fix #55146: iconv_mime_decode_headers() skips some headers
+    
+    If we're expecting the start of an encoded word (`=?`), but instead of
+    the question mark get a line break (CR or LF), we must not append it to
+    the `pretval`.
+
+diff --git a/ext/iconv/iconv.c b/ext/iconv/iconv.c
+index 7f7125b..a76b6fd 100644
+--- a/ext/iconv/iconv.c
++++ b/ext/iconv/iconv.c
+@@ -1555,6 +1555,9 @@ static php_iconv_err_t _php_iconv_mime_decode(smart_str *pretval, const char *st
+ 
+ 			case 1: /* expecting a delimiter */
+ 				if (*p1 != '?') {
++					if (*p1 == '\r' || *p1 == '\n') {
++						--p1;
++					}
+ 					err = _php_iconv_appendl(pretval, encoded_word, (size_t)((p1 + 1) - encoded_word), cd_pl); 
+ 					if (err != PHP_ICONV_ERR_SUCCESS) {
+ 						goto out;
+diff --git a/ext/iconv/tests/bug55146.phpt b/ext/iconv/tests/bug55146.phpt
+new file mode 100644
+index 0000000..b3c2015
+--- /dev/null
++++ b/ext/iconv/tests/bug55146.phpt
+@@ -0,0 +1,36 @@
++--TEST--
++Bug #55146 (iconv_mime_decode_headers() skips some headers)
++--SKIPIF--
++<?php
++if (!extension_loaded('iconv')) die('skip iconv extension not available');
++?>
++--FILE--
++<?php
++
++$headers = <<< HEADERS
++X-Header-One: H4sIAAAAAAAAA+NgFlsCAAA=
++X-Header-Two: XtLePq6GTMn8G68F0
++HEADERS;
++var_dump(iconv_mime_decode_headers($headers, ICONV_MIME_DECODE_CONTINUE_ON_ERROR));
++
++$headers = <<< HEADERS
++X-Header-One: =
++X-Header-Two: XtLePq6GTMn8G68F0
++HEADERS;
++var_dump(iconv_mime_decode_headers($headers, ICONV_MIME_DECODE_STRICT));
++?>
++===DONE===
++--EXPECT--
++array(2) {
++  ["X-Header-One"]=>
++  string(24) "H4sIAAAAAAAAA+NgFlsCAAA="
++  ["X-Header-Two"]=>
++  string(17) "XtLePq6GTMn8G68F0"
++}
++array(2) {
++  ["X-Header-One"]=>
++  string(1) "="
++  ["X-Header-Two"]=>
++  string(17) "XtLePq6GTMn8G68F0"
++}
++===DONE===

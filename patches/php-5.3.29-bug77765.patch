@@ -1,0 +1,52 @@
+commit fe2885d80a76db84fd3a8e1556aff2221be195e1
+Author: Vlad Temian <vladtemian@gmail.com>
+Date:   Mon Mar 18 18:35:24 2019 +0200
+
+    Fixed bug #77765
+    
+    Set mode 40755 for directories, via FTP stream stat.
+    
+    Because we already manage to CWD into the current directory,
+    we should set 40755 as mode, instead of 40644.
+
+diff --git a/ext/standard/ftp_fopen_wrapper.c b/ext/standard/ftp_fopen_wrapper.c
+index b6814e753a..37b754a119 100644
+--- a/ext/standard/ftp_fopen_wrapper.c
++++ b/ext/standard/ftp_fopen_wrapper.c
+@@ -805,7 +805,7 @@ static int php_stream_ftp_url_stat(php_stream_wrapper *wrapper, const char *url,
+ 	if (result < 200 || result > 299) {
+ 		ssb->sb.st_mode |= S_IFREG;
+ 	} else {
+-		ssb->sb.st_mode |= S_IFDIR;
++		ssb->sb.st_mode |= S_IFDIR | S_IXUSR | S_IXGRP | S_IXOTH;
+ 	}
+ 
+ 	php_stream_write_string(stream, "TYPE I\r\n"); /* we need this since some servers refuse to accept SIZE command in ASCII mode */
+diff --git a/ext/standard/tests/streams/bug77765.phpt b/ext/standard/tests/streams/bug77765.phpt
+new file mode 100644
+index 0000000000..fa933ffc0d
+--- /dev/null
++++ b/ext/standard/tests/streams/bug77765.phpt
+@@ -0,0 +1,22 @@
++--TEST--
++stat() on directory should return 40755 for ftp://
++--SKIPIF--
++<?php
++if (array_search('ftp',stream_get_wrappers()) === FALSE) die("skip ftp wrapper not available.");
++if (!function_exists('pcntl_fork')) die("skip pcntl_fork() not available.");
++?>
++--FILE--
++<?php
++
++require __DIR__ . "/../../../ftp/tests/server.inc";
++
++$path = "ftp://localhost:" . $port."/www";
++$stat = stat($path);
++var_dump($stat['mode']);
++?>
++==DONE==
++--EXPECTF--
++string(11) "SIZE /www
++"
++int(16877)
++==DONE==

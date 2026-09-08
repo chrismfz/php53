@@ -1,0 +1,34 @@
+commit 3691b6d245db6f69b5844ed86fa623d587d8d626
+Author: Thomas Petazzoni <thomas.petazzoni@bootlin.com>
+Date:   Thu Apr 5 22:50:00 2018 +0200
+
+    Fix #76886: Can't build xmlrpc with expat
+    
+    We fix it by including "php.h" in the HAVE_LIBEXPAT case.
+
+diff --git a/NEWS b/NEWS
+index 952182f..fa5b68f 100644
+--- a/NEWS
++++ b/NEWS
+@@ -25,6 +25,9 @@ PHP                                                                        NEWS
+   . Fixed bug #74764 (Bindto IPv6 works with file_get_contents but fails with 
+     stream_socket_client). (Ville Hukkamäki)
+ 
++- XMLRPC:
++  . Fixed bug #76886 (Can't build xmlrpc with expat). (Thomas Petazzoni, cmb)
++
+ - Zlib:
+   . Fixed bug #75273 (php_zlib_inflate_filter() may not update bytes_consumed).
+     (Martin Burke, cmb)
+diff --git a/ext/xml/expat_compat.h b/ext/xml/expat_compat.h
+index ed621ab..29fe48a 100644
+--- a/ext/xml/expat_compat.h
++++ b/ext/xml/expat_compat.h
+@@ -154,6 +154,7 @@ PHP_XML_API const XML_Char *XML_ExpatVersion(void);
+ PHP_XML_API void XML_ParserFree(XML_Parser);
+ 
+ #elif defined(HAVE_LIBEXPAT)
++#include "php.h"
+ #include <expat.h>
+ #endif /* HAVE_LIBEXPAT */
+ 

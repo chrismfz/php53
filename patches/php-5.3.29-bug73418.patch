@@ -1,0 +1,12 @@
+diff -apruN php-5.3.29.orig/ext/imap/php_imap.c php-5.3.29/ext/imap/php_imap.c
+--- php-5.3.29.orig/ext/imap/php_imap.c	2016-11-13 09:35:51.125668890 -0500
++++ php-5.3.29/ext/imap/php_imap.c	2016-11-13 09:35:52.963902520 -0500
+@@ -3903,7 +3903,7 @@ int _php_imap_mail(char *to, char *subje
+ 	char *tsm_errmsg = NULL;
+ 	ADDRESS *addr;
+ 	char *bufferTo = NULL, *bufferCc = NULL, *bufferBcc = NULL, *bufferHeader = NULL;
+-	int offset, bufferLen = 0;
++	size_t offset, bufferLen = 0;
+ 	size_t bt_len;
+ 
+ 	if (headers) {

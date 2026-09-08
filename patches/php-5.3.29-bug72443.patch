@@ -1,0 +1,34 @@
+commit 45a3c0e5969b482ffdcf5674039784b3a2c24e33
+Author: Peter Kokot <peterkokot@gmail.com>
+Date:   Mon Aug 6 01:22:17 2018 +0200
+
+    Fix bug #72443: Generate enabled extension
+    
+    The PHP extension generator script now generates enabled extension with
+    less required steps for using the newly generated files.
+
+diff --git a/ext/ext_skel b/ext/ext_skel
+index f5b9b25..63563e7 100755
+--- a/ext/ext_skel
++++ b/ext/ext_skel
+@@ -120,9 +120,9 @@ dnl [  --with-$extname             Include $extname support])
+ 
+ dnl Otherwise use enable:
+ 
+-dnl PHP_ARG_ENABLE($extname, whether to enable $extname support,
++PHP_ARG_ENABLE($extname, whether to enable $extname support,
+ dnl Make sure that the comment is aligned:
+-dnl [  --enable-$extname           Enable $extname support])
++[  --enable-$extname           Enable $extname support])
+ 
+ if test "\$PHP_$EXTNAME" != "no"; then
+   dnl Write more examples of tests here...
+@@ -179,7 +179,7 @@ cat >config.w32 <<eof
+ // ARG_WITH("$extname", "for $extname support", "no");
+ 
+ // Otherwise, use ARG_ENABLE
+-// ARG_ENABLE("$extname", "enable $extname support", "no");
++ARG_ENABLE("$extname", "enable $extname support", "no");
+ 
+ if (PHP_$EXTNAME != "no") {
+ 	EXTENSION("$extname", "$extname.c", PHP_EXTNAME_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1");

@@ -1,0 +1,55 @@
+commit e29c946c29afdb0bf89c5329fcf3038448d50e17
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Sat Aug 25 15:41:44 2018 +0200
+
+    Fix #60494: iconv_mime_decode does ignore special characters
+    
+    We must not ignore erroneous characters in mime headers, but rather let
+    iconv_mime_decode() fail in this case, issuing the usual notice
+    regarding illegal characters.
+
+diff --git a/ext/iconv/iconv.c b/ext/iconv/iconv.c
+index dd56eba..d759596 100644
+--- a/ext/iconv/iconv.c
++++ b/ext/iconv/iconv.c
+@@ -1544,7 +1544,10 @@ static php_iconv_err_t _php_iconv_mime_decode(smart_str *pretval, const char *st
+ 						break;
+ 
+ 					default: /* first letter of a non-encoded word */
+-						_php_iconv_appendc(pretval, *p1, cd_pl);
++						err = _php_iconv_appendc(pretval, *p1, cd_pl);
++						if (err != PHP_ICONV_ERR_SUCCESS) {
++							goto out;
++						}
+ 						encoded_word = NULL;
+ 						if ((mode & PHP_ICONV_MIME_DECODE_STRICT)) {
+ 							scan_stat = 12;
+diff --git a/ext/iconv/tests/bug60494.phpt b/ext/iconv/tests/bug60494.phpt
+new file mode 100644
+index 0000000..5c658af
+--- /dev/null
++++ b/ext/iconv/tests/bug60494.phpt
+@@ -0,0 +1,23 @@
++--TEST--
++Bug #60494 (iconv_mime_decode does ignore special characters)
++--SKIPIF--
++<?php
++if (!extension_loaded('iconv')) die('skip iconv extension not available');
++?>
++--FILE--
++<?php
++var_dump(iconv_mime_decode('ä'));
++var_dump(iconv_mime_decode('ö'));
++var_dump(iconv_mime_decode('ß'));
++?>
++===DONE===
++--EXPECTF--
++Notice: iconv_mime_decode(): Detected an illegal character in input string in %s on line %d
++bool(false)
++
++Notice: iconv_mime_decode(): Detected an illegal character in input string in %s on line %d
++bool(false)
++
++Notice: iconv_mime_decode(): Detected an illegal character in input string in %s on line %d
++bool(false)
++===DONE===

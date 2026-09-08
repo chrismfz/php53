@@ -1,0 +1,482 @@
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/bug73192.phpt php-5.3.29/ext/standard/tests/url/bug73192.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/bug73192.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/standard/tests/url/bug73192.phpt	2016-11-13 12:33:48.297682548 -0500
+@@ -0,0 +1,30 @@
++--TEST--
++Bug #73192: parse_url return wrong hostname
++--FILE--
++<?php
++
++var_dump(parse_url("http://example.com:80#@google.com/"));
++var_dump(parse_url("http://example.com:80?@google.com/"));
++
++?>
++--EXPECT--
++array(4) {
++  ["scheme"]=>
++  string(4) "http"
++  ["host"]=>
++  string(11) "example.com"
++  ["port"]=>
++  int(80)
++  ["fragment"]=>
++  string(12) "@google.com/"
++}
++array(4) {
++  ["scheme"]=>
++  string(4) "http"
++  ["host"]=>
++  string(11) "example.com"
++  ["port"]=>
++  int(80)
++  ["query"]=>
++  string(12) "@google.com/"
++}
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_001.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_001.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_001.phpt	2016-11-13 12:18:07.981173155 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_001.phpt	2016-11-13 12:33:48.299682803 -0500
+@@ -752,25 +752,9 @@ echo "Done";
+   int(6)
+ }
+ 
+---> http://?:/: array(3) {
+-  ["scheme"]=>
+-  string(4) "http"
+-  ["host"]=>
+-  string(1) "?"
+-  ["path"]=>
+-  string(1) "/"
+-}
++--> http://?:/: bool(false)
+ 
+---> http://@?:/: array(4) {
+-  ["scheme"]=>
+-  string(4) "http"
+-  ["host"]=>
+-  string(1) "?"
+-  ["user"]=>
+-  string(0) ""
+-  ["path"]=>
+-  string(1) "/"
+-}
++--> http://@?:/: bool(false)
+ 
+ --> file:///:: array(2) {
+   ["scheme"]=>
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_002.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_002.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_002.phpt	2016-11-13 12:18:07.980173028 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_002.phpt	2016-11-13 12:33:48.300682930 -0500
+@@ -97,8 +97,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : string(4) "http"
+ --> x://::6.5   : string(1) "x"
+---> http://?:/   : string(4) "http"
+---> http://@?:/   : string(4) "http"
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : string(4) "file"
+ --> file:///a:/   : string(4) "file"
+ --> file:///ab:/   : string(4) "file"
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_003.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_003.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_003.phpt	2016-11-13 12:18:07.981173155 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_003.phpt	2016-11-13 12:33:48.301683057 -0500
+@@ -96,8 +96,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : string(1) ":"
+ --> x://::6.5   : string(1) ":"
+---> http://?:/   : string(1) "?"
+---> http://@?:/   : string(1) "?"
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : NULL
+ --> file:///a:/   : NULL
+ --> file:///ab:/   : NULL
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_004.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_004.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_004.phpt	2016-11-13 12:18:07.979172901 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_004.phpt	2016-11-13 12:33:48.301683057 -0500
+@@ -96,8 +96,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : NULL
+ --> x://::6.5   : int(6)
+---> http://?:/   : NULL
+---> http://@?:/   : NULL
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : NULL
+ --> file:///a:/   : NULL
+ --> file:///ab:/   : NULL
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_005.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_005.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_005.phpt	2016-11-13 12:18:07.981173155 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_005.phpt	2016-11-13 12:33:48.302683184 -0500
+@@ -96,8 +96,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : NULL
+ --> x://::6.5   : NULL
+---> http://?:/   : NULL
+---> http://@?:/   : string(0) ""
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : NULL
+ --> file:///a:/   : NULL
+ --> file:///ab:/   : NULL
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_006.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_006.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_006.phpt	2016-11-13 12:18:07.979172901 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_006.phpt	2016-11-13 12:33:48.303683311 -0500
+@@ -96,8 +96,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : NULL
+ --> x://::6.5   : NULL
+---> http://?:/   : NULL
+---> http://@?:/   : NULL
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : NULL
+ --> file:///a:/   : NULL
+ --> file:///ab:/   : NULL
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_007.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_007.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_007.phpt	2016-11-13 12:18:07.980173028 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_007.phpt	2016-11-13 12:33:48.303683311 -0500
+@@ -96,8 +96,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : NULL
+ --> x://::6.5   : NULL
+---> http://?:/   : string(1) "/"
+---> http://@?:/   : string(1) "/"
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : string(2) "/:"
+ --> file:///a:/   : string(3) "a:/"
+ --> file:///ab:/   : string(5) "/ab:/"
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_008.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_008.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_008.phpt	2016-11-13 12:18:07.980173028 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_008.phpt	2016-11-13 12:33:48.304683438 -0500
+@@ -96,8 +96,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : NULL
+ --> x://::6.5   : NULL
+---> http://?:/   : NULL
+---> http://@?:/   : NULL
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : NULL
+ --> file:///a:/   : NULL
+ --> file:///ab:/   : NULL
+diff -apruN php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_009.phpt php-5.3.29/ext/standard/tests/url/parse_url_basic_009.phpt
+--- php-5.3.29.orig/ext/standard/tests/url/parse_url_basic_009.phpt	2016-11-13 12:18:07.981173155 -0500
++++ php-5.3.29/ext/standard/tests/url/parse_url_basic_009.phpt	2016-11-13 12:33:48.305683565 -0500
+@@ -96,8 +96,8 @@ echo "Done";
+ --> x://::abc/?   : bool(false)
+ --> http://::?   : NULL
+ --> x://::6.5   : NULL
+---> http://?:/   : NULL
+---> http://@?:/   : NULL
++--> http://?:/   : bool(false)
++--> http://@?:/   : bool(false)
+ --> file:///:   : NULL
+ --> file:///a:/   : NULL
+ --> file:///ab:/   : NULL
+diff -apruN php-5.3.29.orig/ext/standard/url.c php-5.3.29/ext/standard/url.c
+--- php-5.3.29.orig/ext/standard/url.c	2016-11-13 12:18:08.420228957 -0500
++++ php-5.3.29/ext/standard/url.c	2016-11-13 12:33:48.305683565 -0500
+@@ -65,27 +65,27 @@ PHPAPI char *php_replace_controlchars_ex
+ {
+ 	unsigned char *s = (unsigned char *)str;
+ 	unsigned char *e = (unsigned char *)str + len;
+-	
++
+ 	if (!str) {
+ 		return (NULL);
+ 	}
+-	
++
+ 	while (s < e) {
+-	    
++
+ 		if (iscntrl(*s)) {
+ 			*s='_';
+-		}	
++		}
+ 		s++;
+ 	}
+-	
++
+ 	return (str);
+-} 
++}
+ /* }}} */
+ 
+ PHPAPI char *php_replace_controlchars(char *str)
+ {
+ 	return php_replace_controlchars_ex(str, strlen(str));
+-} 
++}
+ 
+ PHPAPI php_url *php_url_parse(char const *str)
+ {
+@@ -99,7 +99,7 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 	char port_buf[6];
+ 	php_url *ret = ecalloc(1, sizeof(php_url));
+ 	char const *s, *e, *p, *pp, *ue;
+-		
++
+ 	s = str;
+ 	ue = s + length;
+ 
+@@ -118,40 +118,40 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 			}
+ 			p++;
+ 		}
+-	
++
+ 		if (*(e + 1) == '\0') { /* only scheme is available */
+ 			ret->scheme = estrndup(s, (e - s));
+ 			php_replace_controlchars_ex(ret->scheme, (e - s));
+ 			goto end;
+ 		}
+ 
+-		/* 
++		/*
+ 		 * certain schemas like mailto: and zlib: may not have any / after them
+ 		 * this check ensures we support those.
+ 		 */
+ 		if (*(e+1) != '/') {
+-			/* check if the data we get is a port this allows us to 
++			/* check if the data we get is a port this allows us to
+ 			 * correctly parse things like a.com:80
+ 			 */
+ 			p = e + 1;
+ 			while (isdigit(*p)) {
+ 				p++;
+ 			}
+-			
++
+ 			if ((*p == '\0' || *p == '/') && (p - e) < 7) {
+ 				goto parse_port;
+ 			}
+-			
++
+ 			ret->scheme = estrndup(s, (e-s));
+ 			php_replace_controlchars_ex(ret->scheme, (e - s));
+-			
++
+ 			length -= ++e - s;
+ 			s = e;
+ 			goto just_path;
+ 		} else {
+ 			ret->scheme = estrndup(s, (e-s));
+ 			php_replace_controlchars_ex(ret->scheme, (e - s));
+-		
++
+ 			if (*(e+2) == '/') {
+ 				s = e + 3;
+ 				if (!strncasecmp("file", ret->scheme, sizeof("file"))) {
+@@ -173,9 +173,9 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 					length -= ++e - s;
+ 					s = e;
+ 					goto just_path;
+-				}	
++				}
+ 			}
+-		}	
++		}
+ 	} else if (e) { /* no scheme; starts with colon: look for port */
+ 		parse_port:
+ 		p = e + 1;
+@@ -209,55 +209,34 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 		ue = s + length;
+ 		goto nohost;
+ 	}
+-	
+-	e = ue;
+-	
+-	if (!(p = memchr(s, '/', (ue - s)))) {
+-		char *query, *fragment;
+-
+-		query = memchr(s, '?', (ue - s));
+-		fragment = memchr(s, '#', (ue - s));
+-
+-		if (query && fragment) {
+-			if (query > fragment) {
+-				e = fragment;
+-			} else {
+-				e = query;
+-			}
+-		} else if (query) {
+-			e = query;
+-		} else if (fragment) {
+-			e = fragment;
+-		}
+-	} else {
+-		e = p;
+-	}	
+-		
++
++	e = s + strcspn(s, "/?#");
++
+ 	/* check for login and password */
+ 	if ((p = zend_memrchr(s, '@', (e-s)))) {
+ 		if ((pp = memchr(s, ':', (p-s)))) {
+ 			if ((pp-s) > 0) {
+ 				ret->user = estrndup(s, (pp-s));
+ 				php_replace_controlchars_ex(ret->user, (pp - s));
+-			}	
+-		
++			}
++
+ 			pp++;
+ 			if (p-pp > 0) {
+ 				ret->pass = estrndup(pp, (p-pp));
+ 				php_replace_controlchars_ex(ret->pass, (p-pp));
+-			}	
++			}
+ 		} else {
+ 			ret->user = estrndup(s, (p-s));
+ 			php_replace_controlchars_ex(ret->user, (p-s));
+ 		}
+-		
++
+ 		s = p + 1;
+ 	}
+ 
+ 	/* check for port */
+ 	if (*s == '[' && *(e-1) == ']') {
+-		/* Short circuit portscan, 
+-		   we're dealing with an 
++		/* Short circuit portscan,
++		   we're dealing with an
+ 		   IPv6 embedded address */
+ 		p = s;
+ 	} else {
+@@ -291,11 +270,11 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 				}
+ 			}
+ 			p--;
+-		}	
++		}
+ 	} else {
+ 		p = e;
+ 	}
+-	
++
+ 	/* check if we have a valid host, if we don't reject the string as url */
+ 	if ((p-s) < 1) {
+ 		STR_FREE(ret->scheme);
+@@ -307,15 +286,15 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 
+ 	ret->host = estrndup(s, (p-s));
+ 	php_replace_controlchars_ex(ret->host, (p - s));
+-	
++
+ 	if (e == ue) {
+ 		return ret;
+ 	}
+-	
++
+ 	s = e;
+-	
++
+ 	nohost:
+-	
++
+ 	if ((p = memchr(s, '?', (ue - s)))) {
+ 		pp = memchr(s, '#', (ue - s));
+ 
+@@ -327,14 +306,14 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 			p = pp;
+ 			goto label_parse;
+ 		}
+-	
++
+ 		if (p - s) {
+ 			ret->path = estrndup(s, (p-s));
+ 			php_replace_controlchars_ex(ret->path, (p - s));
+-		}	
+-	
++		}
++
+ 		if (pp) {
+-			if (pp - ++p) { 
++			if (pp - ++p) {
+ 				ret->query = estrndup(p, (pp-p));
+ 				php_replace_controlchars_ex(ret->query, (pp - p));
+ 			}
+@@ -348,15 +327,15 @@ PHPAPI php_url *php_url_parse_ex(char co
+ 		if (p - s) {
+ 			ret->path = estrndup(s, (p-s));
+ 			php_replace_controlchars_ex(ret->path, (p - s));
+-		}	
+-		
++		}
++
+ 		label_parse:
+ 		p++;
+-		
++
+ 		if (ue - p) {
+ 			ret->fragment = estrndup(p, (ue-p));
+ 			php_replace_controlchars_ex(ret->fragment, (ue - p));
+-		}	
++		}
+ 	} else {
+ 		ret->path = estrndup(s, (ue-s));
+ 		php_replace_controlchars_ex(ret->path, (ue - s));
+@@ -438,7 +417,7 @@ PHP_FUNCTION(parse_url)
+ 		add_assoc_string(return_value, "query", resource->query, 1);
+ 	if (resource->fragment != NULL)
+ 		add_assoc_string(return_value, "fragment", resource->fragment, 1);
+-done:	
++done:
+ 	php_url_free(resource);
+ }
+ /* }}} */
+@@ -486,7 +465,7 @@ PHPAPI char *php_url_encode(char const *
+ 	register unsigned char c;
+ 	unsigned char *to, *start;
+ 	unsigned char const *from, *end;
+-	
++
+ 	from = (unsigned char *)s;
+ 	end = (unsigned char *)s + len;
+ 	start = to = (unsigned char *) safe_emalloc(3, len, 1);
+@@ -579,7 +558,7 @@ PHPAPI int php_url_decode(char *str, int
+ 		if (*data == '+') {
+ 			*dest = ' ';
+ 		}
+-		else if (*data == '%' && len >= 2 && isxdigit((int) *(data + 1)) 
++		else if (*data == '%' && len >= 2 && isxdigit((int) *(data + 1))
+ 				 && isxdigit((int) *(data + 2))) {
+ #ifndef CHARSET_EBCDIC
+ 			*dest = (char) php_htoi(data + 1);
+@@ -677,7 +656,7 @@ PHPAPI int php_raw_url_decode(char *str,
+ 	char *data = str;
+ 
+ 	while (len--) {
+-		if (*data == '%' && len >= 2 && isxdigit((int) *(data + 1)) 
++		if (*data == '%' && len >= 2 && isxdigit((int) *(data + 1))
+ 			&& isxdigit((int) *(data + 2))) {
+ #ifndef CHARSET_EBCDIC
+ 			*dest = (char) php_htoi(data + 1);
+@@ -709,7 +688,7 @@ PHP_FUNCTION(get_headers)
+ 	HashPosition pos;
+ 	HashTable *hashT;
+ 	long format = 0;
+-                
++
+ 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|l", &url, &url_len, &format) == FAILURE) {
+ 		return;
+ 	}
+@@ -728,12 +707,12 @@ PHP_FUNCTION(get_headers)
+ 
+ 	/* check for curl-wrappers that provide headers via a special "headers" element */
+ 	if (zend_hash_find(HASH_OF(stream->wrapperdata), "headers", sizeof("headers"), (void **)&h) != FAILURE && Z_TYPE_PP(h) == IS_ARRAY) {
+-		/* curl-wrappers don't load data until the 1st read */ 
++		/* curl-wrappers don't load data until the 1st read */
+ 		if (!Z_ARRVAL_PP(h)->nNumOfElements) {
+ 			php_stream_getc(stream);
+ 		}
+ 		zend_hash_find(HASH_OF(stream->wrapperdata), "headers", sizeof("headers"), (void **)&h);
+-		hashT = Z_ARRVAL_PP(h);	
++		hashT = Z_ARRVAL_PP(h);
+ 	} else {
+ 		hashT = HASH_OF(stream->wrapperdata);
+ 	}

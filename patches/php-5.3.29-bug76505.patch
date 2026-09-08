@@ -1,0 +1,45 @@
+commit 6531719da575e8ceb14fa8e9fefcac2ab365dd00
+Author: Xinchen Hui <laruence@gmail.com>
+Date:   Thu Jun 21 17:26:05 2018 +0800
+
+    Fixed bug #76505 (array_merge_recursive() is duplicating sub-array keys)
+
+diff --git a/ext/standard/tests/array/bug76505.phpt b/ext/standard/tests/array/bug76505.phpt
+new file mode 100644
+index 0000000..ad0b2c8
+--- /dev/null
++++ b/ext/standard/tests/array/bug76505.phpt
+@@ -0,0 +1,33 @@
++--TEST--
++Bug #76505 (array_merge_recursive() is duplicating sub-array keys)
++--FILE--
++<?php
++$array1 = array(
++    'k' => array(
++        2 => 100,
++        98 => 200,
++    )
++);
++
++$array2 = array(
++    'k' => array(
++        64 => 300
++    )
++);
++
++$array3 = array_merge_recursive( $array1, $array2 );
++
++var_dump($array3);
++?>
++--EXPECT--
++array(1) {
++  ["k"]=>
++  array(3) {
++    [2]=>
++    int(100)
++    [98]=>
++    int(200)
++    [99]=>
++    int(300)
++  }
++}

@@ -1,0 +1,25 @@
+commit 88ffe0579726f7ba1985c9223e6005c581032757
+Author: Nikita Popov <nikita.ppv@gmail.com>
+Date:   Tue Jun 25 12:09:47 2019 +0200
+
+    Fix bug #77124
+    
+    This is a backport of 6fcae63f614d1ed4aaeaff7b13a7a4627b1f1312
+    to PHP 7.2.
+
+diff --git a/ext/ftp/ftp.c b/ext/ftp/ftp.c
+index 8f9f737678..28760349df 100644
+--- a/ext/ftp/ftp.c
++++ b/ext/ftp/ftp.c
+@@ -289,9 +289,10 @@ ftp_login(ftpbuf_t *ftp, const char *user, const size_t user_len, const char *pa
+ 		SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_BOTH);
+ 
+ 		ftp->ssl_handle = SSL_new(ctx);
++		SSL_CTX_free(ctx);
++
+ 		if (ftp->ssl_handle == NULL) {
+ 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "failed to create the SSL handle");
+-			SSL_CTX_free(ctx);
+ 			return 0;
+ 		}
+ 

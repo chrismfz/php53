@@ -1,0 +1,61 @@
+diff --git a/ext/date/php_date.c b/ext/date/php_date.c
+index 75bdf33..906da8a 100644
+--- a/ext/date/php_date.c
++++ b/ext/date/php_date.c
+@@ -579,6 +579,7 @@ static zend_object_value date_object_clone_interval(zval *this_ptr TSRMLS_DC);
+ static zend_object_value date_object_clone_period(zval *this_ptr TSRMLS_DC);
+ 
+ static int date_object_compare_date(zval *d1, zval *d2 TSRMLS_DC);
++static int date_object_compare_timezone(zval *tz1, zval *tz2 TSRMLS_DC);
+ static HashTable *date_object_get_properties(zval *object TSRMLS_DC);
+ static HashTable *date_object_get_properties_interval(zval *object TSRMLS_DC);
+ static HashTable *date_object_get_properties_period(zval *object TSRMLS_DC);
+@@ -1997,6 +1998,7 @@ static void date_register_classes(TSRMLS_D)
+ 	date_ce_timezone = zend_register_internal_class_ex(&ce_timezone, NULL, NULL TSRMLS_CC);
+ 	memcpy(&date_object_handlers_timezone, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+ 	date_object_handlers_timezone.clone_obj = date_object_clone_timezone;
++	date_object_handlers_timezone.compare_objects = date_object_compare_timezone;
+ 
+ #define REGISTER_TIMEZONE_CLASS_CONST_STRING(const_name, value) \
+ 	zend_declare_class_constant_long(date_ce_timezone, const_name, sizeof(const_name)-1, value TSRMLS_CC);
+@@ -2120,6 +2122,40 @@ static int date_object_compare_date(zval *d1, zval *d2 TSRMLS_DC)
+ 	return 1;
+ }
+ 
++static int date_object_compare_timezone(zval *tz1, zval *tz2 TSRMLS_DC) /* {{{ */
++{
++	php_timezone_obj *o1, *o2;
++
++	if (Z_TYPE_P(tz1) == IS_OBJECT && Z_TYPE_P(tz2) == IS_OBJECT &&
++		instanceof_function(Z_OBJCE_P(tz1), date_ce_timezone TSRMLS_CC) &&
++		instanceof_function(Z_OBJCE_P(tz2), date_ce_timezone TSRMLS_CC)) {
++		php_timezone_obj *o1 = zend_object_store_get_object(tz1 TSRMLS_CC);
++		php_timezone_obj *o2 = zend_object_store_get_object(tz2 TSRMLS_CC);
++		
++		if (!o1->initialized || !o2->initialized) {
++			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Trying to compare an incomplete DateTimeZone object");
++			return 1;
++		}
++
++		if (o1->type != o2->type) {
++			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Trying to compare different kinds of DateTimeZone objects");
++			return 1;
++		}		
++		
++		switch (o1->type) {
++			case TIMELIB_ZONETYPE_OFFSET:
++				return o1->tzi.utc_offset == o2->tzi.utc_offset ? 0 : 1;
++			case TIMELIB_ZONETYPE_ABBR:
++				return strcmp(o1->tzi.z.abbr, o2->tzi.z.abbr) ? 1 : 0;
++			case TIMELIB_ZONETYPE_ID:
++				return strcmp(o1->tzi.tz->name, o2->tzi.tz->name) ? 1 : 0;
++			EMPTY_SWITCH_DEFAULT_CASE();
++		}
++	}
++	
++	return 1;
++} /* }}} */
++
+ static HashTable *date_object_get_properties(zval *object TSRMLS_DC)
+ {
+ 	HashTable *props;

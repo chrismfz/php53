@@ -1,0 +1,50 @@
+commit a890c5beb8327b7fbb2f25347256ef0dc5809750
+Author: Derick Rethans <github@derickrethans.nl>
+Date:   Thu Feb 28 13:50:35 2019 +0000
+
+    Fixed bug #50020 (DateInterval:createDateFromString() silently fails)
+
+diff --git a/ext/date/php_date.c b/ext/date/php_date.c
+index c8479b5164..5cc3f794cd 100644
+--- a/ext/date/php_date.c
++++ b/ext/date/php_date.c
+@@ -4435,12 +4435,21 @@ PHP_FUNCTION(date_interval_create_from_date_string)
+ 		RETURN_FALSE;
+ 	}
+ 
+-	php_date_instantiate(date_ce_interval, return_value TSRMLS_CC);
+-
+ 	time = timelib_strtotime(time_str, time_str_len, &err, DATE_TIMEZONEDB, php_date_parse_tzfile_wrapper);
++
++	if (err->error_count > 0)  {
++		php_error_docref(NULL, E_WARNING, "Unknown or bad format (%s) at position %d (%c): %s", time_str,
++			err->error_messages[0].position, err->error_messages[0].character ? err->error_messages[0].character : ' ', err->error_messages[0].message);
++		RETVAL_FALSE;
++		goto cleanup;
++	}
++
++	php_date_instantiate(date_ce_interval, return_value TSRMLS_CC);
+ 	diobj = (php_interval_obj *) zend_object_store_get_object(return_value TSRMLS_CC);
+ 	diobj->diff = timelib_rel_time_clone(&time->relative);
+ 	diobj->initialized = 1;
++
++cleanup:
+ 	timelib_time_dtor(time);
+ 	timelib_error_container_dtor(err);
+ }
+diff --git a/ext/date/tests/date_interval_create_from_date_string_broken.phpt b/ext/date/tests/date_interval_create_from_date_string_broken.phpt
+new file mode 100644
+index 0000000000..c065de0f8c
+--- /dev/null
++++ b/ext/date/tests/date_interval_create_from_date_string_broken.phpt
+@@ -0,0 +1,10 @@
++--TEST--
++Test date_interval_create_from_date_string() function : nonsense data
++--FILE--
++<?php
++$i = date_interval_create_from_date_string("foobar");
++var_dump($i);
++?>
++--EXPECTF--
++Warning: date_interval_create_from_date_string(): Unknown or bad format (foobar) at position 0 (f): The timezone could not be found in the database in %sdate_interval_create_from_date_string_broken.php on line 2
++bool(false)

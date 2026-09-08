@@ -1,0 +1,28 @@
+diff --git a/ext/date/php_date.c b/ext/date/php_date.c
+index 75bdf33..572a81a 100644
+--- a/ext/date/php_date.c
++++ b/ext/date/php_date.c
+@@ -3099,6 +3099,7 @@ PHP_FUNCTION(date_time_set)
+ 	dateobj->time->i = i;
+ 	dateobj->time->s = s;
+ 	timelib_update_ts(dateobj->time, NULL);
++	timelib_update_from_sse(dateobj->time);
+ 
+ 	RETURN_ZVAL(object, 1, 0);
+ }
+@@ -3122,6 +3123,7 @@ PHP_FUNCTION(date_date_set)
+ 	dateobj->time->m = m;
+ 	dateobj->time->d = d;
+ 	timelib_update_ts(dateobj->time, NULL);
++	timelib_update_from_sse(dateobj->time);
+ 
+ 	RETURN_ZVAL(object, 1, 0);
+ }
+@@ -3149,6 +3151,7 @@ PHP_FUNCTION(date_isodate_set)
+ 	dateobj->time->have_relative = 1;
+ 	
+ 	timelib_update_ts(dateobj->time, NULL);
++	timelib_update_from_sse(dateobj->time);
+ 
+ 	RETURN_ZVAL(object, 1, 0);
+ }

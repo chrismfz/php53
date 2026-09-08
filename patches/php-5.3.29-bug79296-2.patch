@@ -1,0 +1,33 @@
+From d3b4b576219546173e9e7cd85bedb20aa2400e85 Mon Sep 17 00:00:00 2001
+From: Dmitriy Popov <dpopov@cloudlinux.com>
+Date: Tue, 28 Nov 2023 14:05:34 +0200
+Subject: [PATCH] php-5.3.29-bug79296-2
+
+Fix based on the following commit:
+
+    From fe1fd6120db6d03c1a580a21b32e059fbc93d7aa Mon Sep 17 00:00:00 2001
+    From: Remi Collet <remi@remirepo.net>
+    Date: Thu, 19 Mar 2020 17:31:17 +0100
+    Subject: [PATCH] Fix Bug #79296 ZipArchive::open fails on empty file
+
+Signed-off-by: Dmitriy Popov <dpopov@cloudlinux.com>
+---
+ ext/zip/php_zip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ext/zip/php_zip.c b/ext/zip/php_zip.c
+index 470b713..039667a 100644
+--- a/ext/zip/php_zip.c
++++ b/ext/zip/php_zip.c
+@@ -1547,7 +1547,7 @@ static ZIPARCHIVE_METHOD(open)
+ 
+ 	/* open for write without option to empty the archive */
+ 	if ((flags & (ZIP_TRUNCATE | ZIP_RDONLY)) == 0) {
+-		zend_stat_t st;
++		struct stat st;
+ 
+ 		/* exists and is empty */
+ 		if (VCWD_STAT(resolved_path, &st) == 0 && st.st_size == 0) {
+-- 
+2.34.1
+

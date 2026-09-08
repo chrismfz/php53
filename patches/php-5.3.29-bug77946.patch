@@ -1,0 +1,106 @@
+commit c8c183eb62b666b5e9c92ca2cbf13f5464ae3aa9
+Author: Abyr Valg <valga@abyrga.ru>
+Date:   Wed Jul 17 21:46:40 2019 +0300
+
+    Fixed bug #77946
+    
+    Save multi_info_read() result into easy handle.
+
+diff --git a/ext/curl/interface.c b/ext/curl/interface.c
+index a252bb3a21..39a6051d5d 100644
+--- a/ext/curl/interface.c
++++ b/ext/curl/interface.c
+@@ -152,8 +152,6 @@ static void _php_curl_close_ex(php_curl *ch TSRMLS_DC);
+ static void _php_curl_close(zend_rsrc_list_entry *rsrc TSRMLS_DC);
+ 
+ 
+-#define SAVE_CURL_ERROR(__handle, __err) (__handle)->err.no = (int) __err;
+-
+ #define CAAL(s, v) add_assoc_long_ex(return_value, s, sizeof(s), (long) v);
+ #define CAAD(s, v) add_assoc_double_ex(return_value, s, sizeof(s), (double) v);
+ #define CAAS(s, v) add_assoc_string_ex(return_value, s, sizeof(s), (char *) (v ? v : ""), 1);
+diff --git a/ext/curl/multi.c b/ext/curl/multi.c
+index 1d325bc329..f86e08aff4 100644
+--- a/ext/curl/multi.c
++++ b/ext/curl/multi.c
+@@ -339,6 +339,7 @@ PHP_FUNCTION(curl_multi_info_read)
+ 	CURLMsg	  *tmp_msg;
+ 	int        queued_msgs;
+ 	zval      *zmsgs_in_queue = NULL;
++	php_curl  *ch;
+ 
+ 	ZEND_PARSE_PARAMETERS_START(1, 2)
+ 		Z_PARAM_RESOURCE(z_mh)
+@@ -376,6 +377,10 @@ PHP_FUNCTION(curl_multi_info_read)
+ 
+ 				zend_list_addref( Z_RESVAL_P( pz_ch ) );
+ 
++				/* we must save result to be able to read error message */
++				ch = (php_curl*)zend_fetch_resource(&pz_ch TSRMLS_CC, -1, le_curl_name, NULL, 1, le_curl);
++				SAVE_CURL_ERROR(ch, tmp_msg->data.result);
++
+ 				/* add_assoc_resource automatically creates a new zval to 
+ 				   wrap the "resource" represented by the current pz_ch */
+ 
+diff --git a/ext/curl/php_curl.h b/ext/curl/php_curl.h
+index f94e7d2898..df378ce585 100644
+--- a/ext/curl/php_curl.h
++++ b/ext/curl/php_curl.h
+@@ -60,6 +60,8 @@ extern zend_module_entry curl_module_entry;
+ #define PHP_CURL_RETURN 4
+ #define PHP_CURL_IGNORE 7
+ 
++#define SAVE_CURL_ERROR(__handle, __err) (__handle)->err.no = (int) __err;
++
+ extern int  le_curl;
+ #define le_curl_name "cURL handle"
+ extern int  le_curl_multi_handle;
+diff --git a/ext/curl/tests/bug77946.phpt b/ext/curl/tests/bug77946.phpt
+new file mode 100644
+index 0000000000..c983a77617
+--- /dev/null
++++ b/ext/curl/tests/bug77946.phpt
+@@ -0,0 +1,43 @@
++--TEST--
++Bug #77946 (Errored cURL resources returned by curl_multi_info_read() must be compatible with curl_errno() and curl_error())
++--SKIPIF--
++<?php
++
++if (!extension_loaded('curl')) {
++	exit('skip curl extension not loaded');
++}
++
++?>
++--FILE--
++<?php
++$urls = array(
++   'unknown://scheme.tld',
++);
++
++$mh = curl_multi_init();
++
++foreach ($urls as $i => $url) {
++    $conn[$i] = curl_init($url);
++    curl_multi_add_handle($mh, $conn[$i]);
++}
++
++do {
++    $status = curl_multi_exec($mh, $active);
++    $info = curl_multi_info_read($mh);
++    if (false !== $info) {
++        var_dump($info['result']);
++        var_dump(curl_errno($info['handle']));
++        var_dump(curl_error($info['handle']));
++    }
++} while ($status === CURLM_CALL_MULTI_PERFORM || $active);
++
++foreach ($urls as $i => $url) {
++    curl_close($conn[$i]);
++}
++
++curl_multi_close($mh);
++?>
++--EXPECTF--
++int(1)
++int(1)
++string(%d) "Protocol %Sunknown%S not supported or disabled in libcurl"

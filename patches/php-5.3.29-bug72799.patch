@@ -1,0 +1,57 @@
+diff -apruN php-5.3.29.orig/ext/wddx/tests/bug72799.phpt php-5.3.29/ext/wddx/tests/bug72799.phpt
+--- php-5.3.29.orig/ext/wddx/tests/bug72799.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/wddx/tests/bug72799.phpt	2016-08-25 10:52:14.409707075 -0400
+@@ -0,0 +1,28 @@
++--TEST--
++Bug #72799: wddx_deserialize null dereference in php_wddx_pop_element
++--SKIPIF--
++<?php
++if (!extension_loaded('wddx')) {
++    die('skip. wddx not available');
++}
++?>
++--FILE--
++<?php
++
++$xml = <<<XML
++<?xml version='1.0'?>
++<!DOCTYPE wddxPacket SYSTEM 'wddx_0100.dtd'>
++<wddxPacket version="1.0">
++    <var name="XXXX">
++        <boolean value="1">
++            <dateTime>1998-06-12T04:32:12+00</dateTime>
++        </boolean>
++    </var>
++</wddxPacket>
++XML;
++
++$array = wddx_deserialize($xml);
++var_dump($array);
++?>
++--EXPECT--
++NULL
+\ No newline at end of file
+diff -apruN php-5.3.29.orig/ext/wddx/wddx.c php-5.3.29/ext/wddx/wddx.c
+--- php-5.3.29.orig/ext/wddx/wddx.c	2016-08-25 10:50:22.000000000 -0400
++++ php-5.3.29/ext/wddx/wddx.c	2016-08-25 10:52:28.250466164 -0400
+@@ -939,10 +939,10 @@ static void php_wddx_pop_element(void *u
+ 		if (!ent1->data) {
+ 			if (stack->top > 1) {
+ 				stack->top--;
++				efree(ent1);
+ 			} else {
+ 				stack->done = 1;
+ 			}
+-			efree(ent1);
+ 			return;
+ 		}
+ 
+@@ -981,7 +981,7 @@ static void php_wddx_pop_element(void *u
+ 			wddx_stack_top(stack, (void**)&ent2);
+ 
+ 			/* if non-existent field */
+-			if (ent2->type == ST_FIELD && ent2->data == NULL) {
++			if (ent2->data == NULL) {
+ 				zval_ptr_dtor(&ent1->data);
+ 				efree(ent1);
+ 				return;

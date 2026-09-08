@@ -1,0 +1,97 @@
+diff -apruN php-5.3.29.orig/ext/soap/soap.c php-5.3.29/ext/soap/soap.c
+--- php-5.3.29.orig/ext/soap/soap.c	2016-12-13 08:31:33.000000000 -0500
++++ php-5.3.29/ext/soap/soap.c	2016-12-13 08:33:58.550657759 -0500
+@@ -1009,6 +1009,7 @@ PHP_METHOD(SoapFault, SoapFault)
+ PHP_METHOD(SoapFault, __toString)
+ {
+ 	zval *faultcode, *faultstring, *file, *line, *trace;
++	zval *faultcode_cp, *faultstring_cp, *file_cp, *line_cp;
+ 	char *str;
+ 	int len;
+ 	zend_fcall_info fci;
+@@ -1037,16 +1038,36 @@ PHP_METHOD(SoapFault, __toString)
+ 
+ 	zend_call_function(&fci, NULL TSRMLS_CC);
+ 
+-	convert_to_string(faultcode);
+-	convert_to_string(faultstring);
+-	convert_to_string(file);
+-	convert_to_long(line);
++	ALLOC_ZVAL(faultcode_cp);
++	INIT_PZVAL_COPY(faultcode_cp, faultcode);
++	zval_copy_ctor(faultcode_cp);
++
++	ALLOC_ZVAL(faultstring_cp);
++	INIT_PZVAL_COPY(faultstring_cp, faultstring);
++	zval_copy_ctor(faultstring_cp);
++
++	ALLOC_ZVAL(file_cp);
++	INIT_PZVAL_COPY(file_cp, file);
++	zval_copy_ctor(file_cp);
++
++	ALLOC_ZVAL(line_cp);
++	INIT_PZVAL_COPY(line_cp, line);
++	zval_copy_ctor(line_cp);
++
++	convert_to_string(faultcode_cp);
++	convert_to_string(faultstring_cp);
++	convert_to_string(file_cp);
++	convert_to_long(line_cp);
+ 	convert_to_string(trace);
+ 
+ 	len = spprintf(&str, 0, "SoapFault exception: [%s] %s in %s:%ld\nStack trace:\n%s",
+-	               Z_STRVAL_P(faultcode), Z_STRVAL_P(faultstring), Z_STRVAL_P(file), Z_LVAL_P(line),
++	               Z_STRVAL_P(faultcode_cp), Z_STRVAL_P(faultstring_cp), Z_STRVAL_P(file_cp), Z_LVAL_P(line_cp),
+ 	               Z_STRLEN_P(trace) ? Z_STRVAL_P(trace) : "#0 {main}\n");
+ 
++	zval_ptr_dtor(&faultcode_cp);
++	zval_ptr_dtor(&faultstring_cp);
++	zval_ptr_dtor(&file_cp);
++	zval_ptr_dtor(&line_cp);
+ 	zval_ptr_dtor(&trace);
+ 
+ 	RETURN_STRINGL(str, len, 0);
+diff -apruN php-5.3.29.orig/ext/soap/tests/bug73452.phpt php-5.3.29/ext/soap/tests/bug73452.phpt
+--- php-5.3.29.orig/ext/soap/tests/bug73452.phpt	1969-12-31 19:00:00.000000000 -0500
++++ php-5.3.29/ext/soap/tests/bug73452.phpt	2016-12-13 08:33:58.552658014 -0500
+@@ -0,0 +1,17 @@
++--TEST--
++Bug #73452 Segfault (Regression for #69152)
++--SKIPIF--
++<?php require_once('skipif.inc'); ?>
++--FILE--
++<?php
++
++$data = 'O:9:"SoapFault":4:{s:9:"faultcode";i:4298448493;s:11:"faultstring";i:4298448543;s:7:"'."\0*\0".'file";i:4298447319;s:7:"'."\0*\0".'line";s:4:"ryat";}';
++echo unserialize($data);
++
++?>
++==DONE==
++--EXPECTF--
++SoapFault exception: [4298448493] 4298448543 in %d:0
++Stack trace:
++#0 %sbug73452.php(4): unserialize('O:9:"SoapFault"...')
++#1 {main}==DONE==
+diff -apruN php-5.3.29.orig/Zend/zend.h php-5.3.29/Zend/zend.h
+--- php-5.3.29.orig/Zend/zend.h	2016-12-13 08:31:32.000000000 -0500
++++ php-5.3.29/Zend/zend.h	2016-12-13 08:36:04.070610700 -0500
+@@ -690,6 +690,19 @@ END_EXTERN_C()
+ 		}													\
+ 	}
+ 
++#define ZVAL_COPY_VALUE(z, v)                   \
++	do {                                        \
++		(z)->value = (v)->value;                \
++		Z_TYPE_P(z) = Z_TYPE_P(v);              \
++	} while (0)
++
++#define INIT_PZVAL_COPY(z, v)                   \
++	do {                                        \
++		ZVAL_COPY_VALUE(z, v);                  \
++		Z_SET_REFCOUNT_P(z, 1);                 \
++		Z_UNSET_ISREF_P(z);                     \
++	} while (0)
++
+ #define SEPARATE_ZVAL_IF_NOT_REF(ppzv)		\
+ 	if (!PZVAL_IS_REF(*ppzv)) {				\
+ 		SEPARATE_ZVAL(ppzv);				\

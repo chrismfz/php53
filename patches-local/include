@@ -1,0 +1,14 @@
+# patches-local/include — CloudLinux series entries we FORCE-KEEP despite the
+# importer's filename-based classification scoring them "skip".
+#
+# One SRPM patch basename per line (# comments allowed). This file is
+# HAND-maintained; the importer reads it and forces these patches into
+# patches/series at their correct spec position, always from the current SRPM
+# (so a refresh keeps them up to date). Each entry MUST say why.
+
+# Foundational: adds the 'p' (path) zend_parse_parameters type and DEFINES the
+# CHECK_NULL_PATH / CHECK_ZVAL_NULL_PATH macros in Zend/zend_API.h. Several kept
+# CVE/bug patches (e.g. CVE-2015-4598, bug71860) call CHECK_NULL_PATH, so without
+# this the link fails with "undefined reference to CHECK_NULL_PATH". Named for the
+# '-p' option so the CVE/bug/hardened filename heuristic misses it.
+p_option.patch

@@ -1,0 +1,19 @@
+commit 3257d22fea101453682941a9a74643e33c6f8ed5
+Author: Tim Siebels <tim_siebels_aurich@yahoo.de>
+Date:   Tue Oct 7 13:02:12 2014 +0200
+
+    Fix #68175: RegexIterator pregFlags are NULL instead of 0
+
+diff --git a/ext/spl/spl_iterators.c b/ext/spl/spl_iterators.c
+index 4cb6380..6b83d34 100644
+--- a/ext/spl/spl_iterators.c
++++ b/ext/spl/spl_iterators.c
+@@ -2209,7 +2209,7 @@ SPL_METHOD(RegexIterator, getPregFlags)
+ 	if (intern->u.regex.use_flags) {
+ 		RETURN_LONG(intern->u.regex.preg_flags);
+ 	} else {
+-		return;
++		RETURN_LONG(0);
+ 	}
+ } /* }}} */
+ 

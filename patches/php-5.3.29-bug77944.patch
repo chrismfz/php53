@@ -1,0 +1,23 @@
+commit 16609880f8338134db08daf6bdcc42025f938fcd
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Sat Apr 27 18:46:27 2019 +0200
+
+    Fix #77944: Wrong meta pdo_type for bigint on LLP64
+    
+    When actually fetching the data, bigint (unsigned) column values are
+    returned as integers on LLP64 architectures, so their pdo_type has to
+    be PDO::PARAM_INT accordingly.
+
+diff --git a/ext/pdo_mysql/mysql_statement.c b/ext/pdo_mysql/mysql_statement.c
+index f4a3879..2777f3c 100644
+--- a/ext/pdo_mysql/mysql_statement.c
++++ b/ext/pdo_mysql/mysql_statement.c
+@@ -876,7 +876,7 @@ static int pdo_mysql_stmt_col_meta(pdo_stmt_t *stmt, zend_long colno, zval *retu
+ 		case MYSQL_TYPE_SHORT:
+ 		case MYSQL_TYPE_INT24:
+ 		case MYSQL_TYPE_LONG:
+-#if SIZEOF_LONG==8
++#if SIZEOF_ZEND_LONG==8
+ 		case MYSQL_TYPE_LONGLONG:
+ #endif
+ 			add_assoc_long(return_value, "pdo_type", PDO_PARAM_INT);

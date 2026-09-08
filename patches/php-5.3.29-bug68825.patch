@@ -1,0 +1,55 @@
+commit 32a728d351aab4bac28790697cd6820a8843645f
+Author: Christoph M. Becker <cmbecker69@gmx.de>
+Date:   Sun Aug 19 14:03:47 2018 +0200
+
+    Fix #68825: Exception in DirectoryIterator::getLinkTarget()
+    
+    intern->file_name may not have been properly set when
+    DirectoryIterator::getLinkTarget() is called, so we make sure it is
+    before using it.
+
+diff --git a/ext/spl/spl_directory.c b/ext/spl/spl_directory.c
+index 4942799..fc4001a 100644
+--- a/ext/spl/spl_directory.c
++++ b/ext/spl/spl_directory.c
+@@ -1229,6 +1229,9 @@ SPL_METHOD(SplFileInfo, getLinkTarget)
+ 
+ 	zend_replace_error_handling(EH_THROW, spl_ce_RuntimeException, &error_handling);
+ 
++	if (intern->file_name == NULL) {
++		spl_filesystem_object_get_file_name(intern);
++	}
+ #if defined(PHP_WIN32) || HAVE_SYMLINK
+ 	if (intern->file_name == NULL) {
+ 		php_error_docref(NULL, E_WARNING, "Empty filename");
+diff --git a/ext/spl/tests/bug68825.phpt b/ext/spl/tests/bug68825.phpt
+new file mode 100644
+index 0000000..b1ed5fb
+--- /dev/null
++++ b/ext/spl/tests/bug68825.phpt
+@@ -0,0 +1,25 @@
++--TEST--
++Bug #68825 (Exception in DirectoryIterator::getLinkTarget())
++--FILE--
++<?php
++$dir = __DIR__ . '/bug68825';
++mkdir($dir);
++symlink(__FILE__, "$dir/foo");
++
++$di = new \DirectoryIterator($dir);
++foreach ($di as $entry) {
++    if ('foo' === $entry->getFilename()) {
++        var_dump($entry->getLinkTarget());
++    }
++}
++?>
++===DONE===
++--EXPECTF--
++string(%d) "%s%eext%espl%etests%ebug68825.php"
++===DONE===
++--CLEAN--
++<?php
++$dir = __DIR__ . '/bug68825';
++unlink("$dir/foo");
++rmdir($dir);
++?>

@@ -1,0 +1,18 @@
+diff --git a/ext/standard/image.c b/ext/standard/image.c
+index 381cf83..1999416 100644
+--- a/ext/standard/image.c
++++ b/ext/standard/image.c
+@@ -1302,7 +1302,12 @@ PHP_FUNCTION(getimagesize)
+ 	if (zend_parse_parameters(argc TSRMLS_CC, "s|Z", &arg1, &arg1_len, &info) == FAILURE) {
+ 		return;
+ 	}
+-	
++
++	if(arg1_len != strlen(arg1)) {
++		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid path");
++		return;
++	}
++
+ 	if (argc == 2) {
+ 		zval_dtor(*info);
+ 		array_init(*info);
