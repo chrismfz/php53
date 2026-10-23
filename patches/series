@@ -319,3 +319,4 @@ php-5.3-CVE-2016-5385.patch -p1
 php-5.3-CVE-2014-1943.patch -p1
 php-5.3-CVE-2013-7345-CVE-2014-3538.patch -p1
 php-5.3-CVE-2026-14355.patch -p1
+php-5.3-CVE-2026-109618-109619.patch -p1

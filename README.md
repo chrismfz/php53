@@ -37,8 +37,16 @@ build-packaging patches we don't use.
     packaging (e.g. `p_option.patch`, which defines `CHECK_NULL_PATH`).
   - `*.patch` — our own adaptations, applied after the vendor series.
 
-Current base: **`ea-php53-php-5.3.29-29.el8.cloudlinux.68`** (2026-08-17) —
-320 patches applied (**151 CVEs**, through CVE-2026-14355), 1 excluded.
+Current base: **`ea-php53-php-5.3.29-29.el8.cloudlinux.69`** (refreshed 2026-10-23) —
+321 patches applied (**152 CVEs**, through CVE-2026-109618/109619, PHP2SHELL), 1
+excluded. The two rejects in the re2c-generated `parse_date.c` /
+`var_unserializer.c` predate this refresh.
+
+**PHP2SHELL (CVE-2026-109618 / CVE-2026-109619)** is in the series since the
+2026-10-23 refresh. It is a deliberate EOL trade: exceeding `memory_limit` (or an
+allocator overflow) now ends the worker with `_exit(1)` instead of a catchable
+fatal error, so shutdown functions don't run and the client sees a 502.
+
 
 ## Build
 

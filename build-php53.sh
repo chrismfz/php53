@@ -50,7 +50,7 @@ BUILD_ROOT="${BUILD_ROOT:-/usr/local/src/ngm-php-build}"
 SRC_DIR="${BUILD_ROOT}/php-${PHP_RELEASE}"
 
 # Keep incompatible components isolated from the host and other PHP builds.
-OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.8}"
+OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.9}"
 OPENSSL_PREFIX="${OPENSSL_PREFIX:-${NGM_ROOT}/openssl-3.5}"
 CURL_VERSION="8.21.0"
 CURL_PREFIX="${CURL_PREFIX:-${NGM_ROOT}/curl-gnutls}"
@@ -59,9 +59,9 @@ MCRYPT_PREFIX="${MCRYPT_PREFIX:-${NGM_ROOT}/libmcrypt}"
 
 # sha256 of the private build-dependency tarballs (non-empty enforces, empty warns).
 # OpenSSL tracks the latest 3.5.x LTS; tools/check-deps.py reports when a newer one
-# ships. php53/php56/php7 share the /opt/ngm/php/openssl-3.5 prefix, so they MUST
+# ships. php53/php56/php (the 7.x repo, formerly php7) share the /opt/ngm/php/openssl-3.5 prefix, so they MUST
 # pin the SAME OpenSSL or a build for one rebuilds the shared prefix under the others.
-OPENSSL_SHA256="${OPENSSL_SHA256:-a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2}"  # openssl-3.5.8.tar.gz
+OPENSSL_SHA256="${OPENSSL_SHA256:-603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a}"  # openssl-3.5.9.tar.gz
 CURL_SHA256="${CURL_SHA256:-aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6}"        # curl-8.21.0.tar.xz
 MCRYPT_SHA256="${MCRYPT_SHA256:-e4eb6c074bbab168ac47b947c195ff8cef9d51a211cdd18ca9c9ef34d27a373e}"     # libmcrypt-2.5.8.tar.gz
 TOOLCHAIN="${TOOLCHAIN:-${NGM_ROOT}/.toolchain-php53}"

@@ -39,6 +39,15 @@ For OpenSSL compatibility work:
 - Provider-related legacy behavior should be tested explicitly rather than enabled globally without need.
 - Keep libcurl on its intended TLS backend and verify that incompatible OpenSSL ABIs are not loaded into the same PHP process.
 
+## Dependency watch
+
+`tools/check-deps.py` (the same file as in `chrismfz/php`) reports any pin that is
+behind upstream: the private OpenSSL 3.5 LTS, curl, and the CloudLinux SRPM series in
+`patches/SOURCE`. `--bump` rewrites the pins and re-imports a newer series. The weekly
+`check-deps` Action (`.github/workflows/check-deps.yml`) runs it and opens one
+`deps/auto-update` PR. Review it like any refresh: validate the apply, host-build,
+then merge. OpenSSL bumps land in lockstep with the sibling repos.
+
 ## Verification
 
 Any compatibility or security source change should be accompanied by the most relevant available checks. For the OpenSSL 3.5 work, the repository's runtime probes are the reference regression tests.
