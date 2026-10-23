@@ -59,7 +59,7 @@ MCRYPT_PREFIX="${MCRYPT_PREFIX:-${NGM_ROOT}/libmcrypt}"
 
 # sha256 of the private build-dependency tarballs (non-empty enforces, empty warns).
 # OpenSSL tracks the latest 3.5.x LTS; tools/check-deps.py reports when a newer one
-# ships. php53/php56/php7 share the /opt/ngm/php/openssl-3.5 prefix, so they MUST
+# ships. php53/php56/php (the 7.x repo, formerly php7) share the /opt/ngm/php/openssl-3.5 prefix, so they MUST
 # pin the SAME OpenSSL or a build for one rebuilds the shared prefix under the others.
 OPENSSL_SHA256="${OPENSSL_SHA256:-a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2}"  # openssl-3.5.8.tar.gz
 CURL_SHA256="${CURL_SHA256:-aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6}"        # curl-8.21.0.tar.xz

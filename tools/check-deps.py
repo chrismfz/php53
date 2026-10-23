@@ -23,7 +23,7 @@ import argparse, glob, os, re, sys, urllib.request
 
 
 def _default_build_sh():
-    """The repo's build script: build.sh (php7) or build-php<NN>.sh (php53/php56)."""
+    """The repo's build script: build.sh (chrismfz/php, formerly php7) or build-php<NN>.sh (php53/php56)."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cand = os.path.join(root, "build.sh")
     if os.path.exists(cand):
